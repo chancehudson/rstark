@@ -1,6 +1,7 @@
 use num_bigint::BigInt;
 use num_bigint::Sign;
 
+#[derive(Clone)]
 pub struct Field {
   p: BigInt,
   g: BigInt
@@ -13,7 +14,7 @@ impl Field {
     }
   }
 
-  pub fn bigint(val: i32) -> BigInt {
+  pub fn bigintf(val: i32) -> BigInt {
     if val < 0 {
       BigInt::new(Sign::Minus, vec!(val.abs().try_into().unwrap()))
     } else {
@@ -21,8 +22,16 @@ impl Field {
     }
   }
 
-  pub fn biguint(val: u32) -> BigInt {
+  pub fn biguintf(val: u32) -> BigInt {
     BigInt::new(Sign::Plus, vec!(val))
+  }
+
+  pub fn bigint(&self, val: i32) -> BigInt {
+    self.modd(Field::bigintf(val))
+  }
+
+  pub fn biguint(&self, val: u32) -> BigInt {
+    self.modd(BigInt::new(Sign::Plus, vec!(val)))
   }
 
   pub fn zero() -> BigInt {
@@ -56,6 +65,10 @@ impl Field {
 
   pub fn sub(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
     self.modd(v1 - v2)
+  }
+
+  pub fn neg(&self, v: &BigInt) -> BigInt {
+    self.mul(v, &(&self.p-&Field::one()))
   }
 
   // exponent should always be > 0
@@ -105,69 +118,71 @@ mod tests {
 
   #[test]
   fn should_make_bigint() {
-    assert_eq!(Field::bigint(0), BigInt::new(Sign::Minus, vec!(0)));
-    assert_eq!(Field::bigint(-29), BigInt::new(Sign::Minus, vec!(29)));
-    assert_eq!(Field::bigint(32), BigInt::new(Sign::Plus, vec!(32)));
-    assert_eq!(Field::biguint(0), BigInt::new(Sign::Minus, vec!(0)));
-    assert_eq!(Field::biguint(32), BigInt::new(Sign::Plus, vec!(32)));
+    let p = Field::bigintf(101);
+    let f = Field::new(p, Field::bigintf(0));
+    assert_eq!(f.bigint(0), BigInt::new(Sign::Minus, vec!(0)));
+    assert_eq!(f.bigint(-29), BigInt::new(Sign::Plus , vec!(72)));
+    assert_eq!(f.bigint(32), BigInt::new(Sign::Plus, vec!(32)));
+    assert_eq!(f.biguint(0), BigInt::new(Sign::Minus, vec!(0)));
+    assert_eq!(f.biguint(32), BigInt::new(Sign::Plus, vec!(32)));
   }
 
   #[test]
   fn should_add_two_elements() {
-    let p = Field::bigint(101);
-    let g = Field::bigint(0);
+    let p = Field::bigintf(101);
+    let g = Field::bigintf(0);
     let f = Field::new(p, g);
 
-    let x = Field::bigint(40);
-    let y = Field::bigint(90);
+    let x = f.bigint(40);
+    let y = f.bigint(90);
 
-    assert_eq!(f.add(&x, &y), Field::bigint(29));
+    assert_eq!(f.add(&x, &y), f.bigint(29));
   }
 
   #[test]
   fn should_mul_two_elements() {
-    let p = Field::bigint(101);
-    let g = Field::bigint(0);
+    let p = Field::bigintf(101);
+    let g = Field::bigintf(0);
     let f = Field::new(p, g);
 
-    let x = Field::bigint(40);
-    let y = Field::bigint(90);
+    let x = f.bigint(40);
+    let y = f.bigint(90);
 
-    assert_eq!(f.mul(&x, &y), Field::bigint(65));
+    assert_eq!(f.mul(&x, &y), f.bigint(65));
   }
 
   #[test]
   fn should_sub_two_elements() {
-    let p = Field::bigint(101);
-    let g = Field::bigint(0);
+    let p = Field::bigintf(101);
+    let g = Field::bigintf(0);
     let f = Field::new(p, g);
 
-    let x = Field::bigint(2);
-    let y = Field::bigint(20);
+    let x = f.bigint(2);
+    let y = f.bigint(20);
 
-    assert_eq!(f.sub(&x, &y), Field::biguint(83));
+    assert_eq!(f.sub(&x, &y), f.biguint(83));
   }
 
   #[test]
   fn should_get_generator() {
-    let p = Field::biguint(3221225473);
-    let f_g = Field::bigint(5);
+    let p = Field::biguintf(3221225473);
+    let f_g = Field::bigintf(5);
     let f = Field::new(p, f_g);
 
     for i in 1..10 {
-      let g = f.generator(&Field::biguint(u32::pow(2, i)));
-      assert_eq!(f.exp(&g, &Field::biguint(u32::pow(2, i))), Field::bigint(1));
+      let g = f.generator(&f.biguint(u32::pow(2, i)));
+      assert_eq!(f.exp(&g, &f.biguint(u32::pow(2, i))), f.bigint(1));
     }
   }
 
   #[test]
   fn should_get_inverse() {
-    let p = Field::biguint(3221225473);
-    let f_g = Field::bigint(5);
+    let p = Field::biguintf(3221225473);
+    let f_g = Field::bigintf(5);
     let f = Field::new(p, f_g);
 
     for i in 1..99 {
-      let v = Field::biguint(i);
+      let v = f.biguint(i);
       let inv = f.inv(&v);
       assert_eq!(f.mul(&inv, &v), Field::one());
     }
