@@ -1,5 +1,5 @@
-use num_bigint::BigInt;
-use num_bigint::Sign;
+use num_bigint::{BigInt, Sign};
+use rand::Rng;
 
 #[derive(Clone)]
 pub struct Field {
@@ -45,10 +45,9 @@ impl Field {
   pub fn modd(&self, v: BigInt) -> BigInt {
     if v < Field::zero() {
       let mut v_m = v.clone();
-      while v_m < Field::zero() {
-        v_m += &self.p;
-      }
-      return v_m;
+      let c = 1 + (&v_m * -1) / &self.p;
+      v_m += c * &self.p;
+      return v_m % &self.p;
     } else if v > self.p {
       return v % &self.p;
     }
@@ -112,6 +111,11 @@ impl Field {
       x = t;
     }
     self.modd(x)
+  }
+
+  pub fn random(&self) -> BigInt {
+    let mut rng = rand::thread_rng();
+    self.bigint(rng.gen())
   }
 
 }

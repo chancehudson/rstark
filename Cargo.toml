@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 blake3 = "1.4.1"
-num-bigint = "0.4.3"
+num-bigint = { version = "0.4.3", features = ["rand"] }
+rand = "0.8.5"
 serde = "1.0.183"

@@ -117,6 +117,13 @@ impl Polynomial {
     self
   }
 
+  pub fn mul_scalar(& mut self, v: &BigInt) -> &Self {
+    for i in 0..self.coefs.len() {
+      self.coefs[i] = self.field.mul(v, &self.coefs[i]);
+    }
+    self
+  }
+
   // trim trailing zero coefficient
   pub fn trim(& mut self) {
     let mut new_len = self.coefs.len();
@@ -142,9 +149,6 @@ impl Polynomial {
   // coef, exp
   pub fn pop_term(& mut self) -> (BigInt, usize) {
     let zero = Field::zero();
-    for i in self.coefs.len()..0 {
-    println!("{}", i);
-    }
     for i in 0..self.coefs.len() {
       let index = (self.coefs.len() - 1) - i;
       if self.coefs[index] != zero {
@@ -154,6 +158,14 @@ impl Polynomial {
       }
     }
     return (zero, 0);
+  }
+
+  pub fn safe_div(&self, divisor: &Polynomial) -> Polynomial {
+    let (q, r) = self.div(divisor);
+    if !r.is_zero() {
+      panic!("non-zero remainder in division");
+    }
+    q
   }
 
   pub fn div(&self, divisor: &Polynomial) -> (Polynomial, Polynomial) {
@@ -177,11 +189,68 @@ impl Polynomial {
     }
     (q, inter)
   }
+
+  pub fn lagrange(x_vals: &Vec<BigInt>, y_vals: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
+    if x_vals.len() != y_vals.len() {
+      panic!("lagrange mismatch x/y array length");
+    }
+    let mut numerator = Polynomial::new(field);
+    numerator.term(&field.bigint(1), 0);
+    for v in x_vals {
+      let mut poly = Polynomial::new(field);
+      poly.term(&field.bigint(1), 1);
+      poly.term(&field.neg(&v), 0);
+      numerator.mul(&poly);
+    }
+    let mut polynomials: Vec<Polynomial> = Vec::new();
+    for i in 0..x_vals.len() {
+      let mut denominator = Field::one();
+      for j in 0..x_vals.len() {
+        if i == j {
+          continue;
+        }
+        denominator = field.mul(&denominator, &(&x_vals[i] - &x_vals[j]));
+      }
+      let mut n = Polynomial::new(field);
+      n.term(&field.bigint(1), 1);
+      n.term(&field.neg(&x_vals[i]), 0);
+      n.mul_scalar(&denominator);
+      let poly = numerator.safe_div(&n);
+      polynomials.push(poly);
+    }
+    let mut out = Polynomial::new(field);
+    for i in 0..x_vals.len() {
+      out.add(polynomials[i].mul_scalar(&y_vals[i]));
+    }
+    out
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn should_interpolate_lagrange() {
+    let p = Field::biguintf(3221225473);
+    let g = Field::bigintf(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let size = 32;
+    let gen = f.generator(&f.bigint(size));
+    let mut x_vals: Vec<BigInt> = Vec::new();
+    let mut y_vals: Vec<BigInt> = Vec::new();
+    for i in 0..size {
+      x_vals.push(f.exp(&gen, &f.bigint(i)));
+      y_vals.push(f.random());
+    }
+
+    let p = Polynomial::lagrange(&x_vals, &y_vals, &f);
+    for i in 0..size {
+      let index = i as usize;
+      assert_eq!(p.eval(&x_vals[index]), y_vals[index]);
+    }
+  }
 
   #[test]
   #[should_panic]
