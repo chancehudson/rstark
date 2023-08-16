@@ -79,11 +79,64 @@ impl Polynomial {
     }
     self
   }
+
+  pub fn mul(& mut self, poly: &Polynomial) -> &Self {
+    let mut out: Vec<BigInt> = Vec::new();
+    out.resize(self.coefs.len() + poly.coefs().len(), Field::zero());
+    for i in 0..poly.coefs().len() {
+      // self.mul_term(&poly.coefs()[i], i);
+      for j in 0..self.coefs.len() {
+        // combine the exponents
+        let e = j + i;
+        out[e] = self.field.add(&out[e], &self.field.mul(&self.coefs[j], &poly.coefs()[i]));
+      }
+    }
+    self.coefs = out;
+    self.trim();
+    self
+  }
+
+  // trim trailing zero coefficient
+  pub fn trim(& mut self) {
+    let mut new_len = self.coefs.len();
+    let zero = Field::zero();
+    for i in self.coefs.len()..0 {
+      if self.coefs[i] != zero {
+        break;
+      }
+      new_len = i;
+    }
+    self.coefs.resize(new_len, zero);
+  }
+
+  pub fn eval(&self, v: &BigInt) -> BigInt {
+    let mut out = Field::zero();
+    for i in 0..self.coefs.len() {
+      out += &self.coefs[i] * self.field.exp(v, &self.field.bigint(i.try_into().unwrap()));
+    }
+    self.field.modd(out)
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn should_eval_polynomial() {
+    let p = Field::biguintf(3221225473);
+    let g = Field::bigintf(5);
+    let f = Rc::new(Field::new(p, g));
+
+    // 9x^3 - 4x^2 - 20
+    let mut poly = Polynomial::new(&f);
+    poly.term(f.bigint(9), 3);
+    poly.term(f.bigint(-4), 2);
+    poly.term(f.bigint(-20), 0);
+
+    assert_eq!(f.bigint(-20), poly.eval(&f.bigint(0)));
+    assert_eq!(f.bigint(-15), poly.eval(&f.bigint(1)));
+  }
 
   #[test]
   fn should_check_polynomial_equality() {
@@ -163,5 +216,34 @@ mod tests {
     expected2.term(f.bigint(9), 3);
     expected2.term(f.bigint(-6), 2);
     assert!(expected2.is_equal(&out2));
+  }
+
+  #[test]
+  fn should_multiply_polynomials() {
+    let p = Field::bigintf(101);
+    let g = Field::bigintf(0);
+    let f = Rc::new(Field::new(p, g));
+
+    // 2x^2 - 20
+    let mut poly1 = Polynomial::new(&f);
+    poly1.term(f.bigint(-20), 0);
+    poly1.term(f.bigint(2), 2);
+
+    // 9x^3 - 4x^2 - 20
+    let mut poly2 = Polynomial::new(&f);
+    poly2.term(f.bigint(9), 3);
+    poly2.term(f.bigint(-4), 2);
+    poly2.term(f.bigint(-20), 0);
+
+    let mut poly3 = poly1.clone();
+    poly3.mul(&poly2);
+
+    let mut expected = Polynomial::new(&f);
+    expected.term(f.bigint(18), 5);
+    expected.term(f.bigint(-8), 4);
+    expected.term(f.bigint(-180), 3);
+    expected.term(f.bigint(40), 2);
+    expected.term(f.bigint(400), 0);
+    assert!(poly3.is_equal(&expected));
   }
 }
