@@ -1,0 +1,18 @@
+version: 2.1
+
+workflows:
+  test:
+    jobs:
+      - test
+
+jobs:
+  test:
+    resource_class: medium
+    docker:
+      - image: cimg/rust:1.71.0
+    steps:
+      - checkout
+      - run: cargo --version
+      - run:
+          name: Test
+          command: cargo test
