@@ -71,6 +71,10 @@ impl Field {
     self.mul(v, &(&self.p-&Field::one()))
   }
 
+  pub fn div(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
+    self.mul(v1, &self.inv(v2))
+  }
+
   // exponent should always be > 0
   pub fn exp(&self, v: &BigInt, e: &BigInt) -> BigInt {
     self.modd(v.clone()).modpow(e, &self.p)
