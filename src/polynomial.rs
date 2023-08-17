@@ -124,6 +124,13 @@ impl Polynomial {
     self
   }
 
+  pub fn scale(& mut self, v: &BigInt) -> &Self {
+    self.coefs = self.coefs.iter().enumerate().map(|(exp, coef)| {
+      return self.field.mul(&self.field.exp(&v, &BigInt::from(exp)), &coef);
+    }).collect();
+    self
+  }
+
   // trim trailing zero coefficient
   pub fn trim(& mut self) {
     let mut new_len = self.coefs.len();
@@ -229,6 +236,29 @@ impl Polynomial {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn should_scale_polynomial() {
+    let p = Field::biguintf(3221225473);
+    let g = Field::bigintf(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let mut poly = Polynomial::new(&f);
+    poly.term(&f.bigint(1), 0);
+    poly.term(&f.bigint(1), 1);
+    poly.term(&f.bigint(1), 2);
+    poly.term(&f.bigint(1), 3);
+    poly.term(&f.bigint(1), 4);
+
+    let mut expected = Polynomial::new(&f);
+    expected.term(&f.bigint(1), 0);
+    expected.term(&f.bigint(2), 1);
+    expected.term(&f.bigint(4), 2);
+    expected.term(&f.bigint(8), 3);
+    expected.term(&f.bigint(16), 4);
+
+    assert!(expected.is_equal(poly.scale(&BigInt::from(2))));
+  }
 
   #[test]
   fn should_interpolate_lagrange() {

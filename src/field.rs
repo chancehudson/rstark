@@ -15,15 +15,11 @@ impl Field {
   }
 
   pub fn bigintf(val: i32) -> BigInt {
-    if val < 0 {
-      BigInt::new(Sign::Minus, vec!(val.abs().try_into().unwrap()))
-    } else {
-      BigInt::new(Sign::Plus, vec!(val.try_into().unwrap()))
-    }
+    BigInt::from(val)
   }
 
   pub fn biguintf(val: u32) -> BigInt {
-    BigInt::new(Sign::Plus, vec!(val))
+    BigInt::from(val)
   }
 
   pub fn bigint(&self, val: i32) -> BigInt {
@@ -44,10 +40,7 @@ impl Field {
 
   pub fn modd(&self, v: BigInt) -> BigInt {
     if v < Field::zero() {
-      let mut v_m = v.clone();
-      let c = 1 + (&v_m * -1) / &self.p;
-      v_m += c * &self.p;
-      return v_m % &self.p;
+      return (&v + &self.p * (1 + (&v * -1) / &self.p)) % &self.p;
     } else if v > self.p {
       return v % &self.p;
     }
