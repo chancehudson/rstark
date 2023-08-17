@@ -41,7 +41,7 @@ impl Field {
   pub fn modd(&self, v: BigInt) -> BigInt {
     if v < Field::zero() {
       return (&v + &self.p * (1 + (&v * -1) / &self.p)) % &self.p;
-    } else if v > self.p {
+    } else if v >= self.p {
       return v % &self.p;
     }
     v
