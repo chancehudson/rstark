@@ -254,11 +254,34 @@ impl Polynomial {
     }
     out
   }
+
+  pub fn test_colinearity(x_vals: &Vec<BigInt>, y_vals: &Vec<BigInt>, field: &Rc<Field>) -> bool {
+    let poly = Polynomial::lagrange(x_vals, y_vals, field);
+    return poly.degree() <= 1;
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn should_test_colinearity() {
+    let p = Field::biguintf(3221225473);
+    let g = Field::bigintf(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let mut poly = Polynomial::new(&f);
+    poly.term(&BigInt::from(-9), 0);
+    poly.term(&BigInt::from(2), 1);
+    let mut x_vals: Vec<BigInt> = Vec::new();
+    let mut y_vals: Vec<BigInt> = Vec::new();
+    for i in 0..3 {
+      x_vals.push(BigInt::from(i));
+      y_vals.push(poly.eval(&BigInt::from(i)));
+    }
+    assert!(Polynomial::test_colinearity(&x_vals, &y_vals, &f));
+  }
 
   #[test]
   fn should_compose_polynomial() {
