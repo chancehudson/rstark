@@ -124,10 +124,33 @@ impl Polynomial {
     self
   }
 
+  pub fn exp(& mut self, v: usize) -> &Self {
+    let mut out = Polynomial::new(&self.field);
+    out.term(&BigInt::from(1), 0);
+    for _ in 0..v {
+      out.mul(&self);
+    }
+    self.coefs = out.coefs;
+    self
+  }
+
   pub fn scale(& mut self, v: &BigInt) -> &Self {
     self.coefs = self.coefs.iter().enumerate().map(|(exp, coef)| {
       return self.field.mul(&self.field.exp(&v, &BigInt::from(exp)), &coef);
     }).collect();
+    self
+  }
+
+  // compose `poly` into `this`
+  pub fn compose(& mut self, poly: &Polynomial) -> &Self {
+    let mut out = Polynomial::new(&self.field);
+    for (exp, coef) in self.coefs.iter().enumerate() {
+      let mut p = poly.clone();
+      p.exp(exp);
+      p.mul_scalar(&coef);
+      out.add(&p);
+    }
+    self.coefs = out.coefs;
     self
   }
 
@@ -236,6 +259,50 @@ impl Polynomial {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn should_compose_polynomial() {
+    let p = Field::biguintf(3221225473);
+    let g = Field::bigintf(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let mut root = Polynomial::new(&f);
+    root.term(&BigInt::from(99), 0);
+    root.term(&BigInt::from(2), 1);
+    root.term(&BigInt::from(4), 2);
+
+    let mut inpoly = Polynomial::new(&f);
+    inpoly.term(&BigInt::from(2), 2);
+    inpoly.term(&BigInt::from(12), 0);
+
+    let mut expected = Polynomial::new(&f);
+    expected.term(&BigInt::from(99), 0);
+    expected.add(&inpoly.clone().mul_scalar(&BigInt::from(2)));
+    {
+      let mut i = inpoly.clone();
+      i.exp(2);
+      i.mul_scalar(&BigInt::from(4));
+      expected.add(&i);
+    }
+
+    assert!(root.compose(&inpoly).is_equal(&expected));
+  }
+
+  #[test]
+  fn should_exp_polynomial() {
+    let p = Field::biguintf(3221225473);
+    let g = Field::bigintf(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let mut poly = Polynomial::new(&f);
+    poly.term(&BigInt::from(2), 0);
+
+    for i in 0..10 {
+      let mut expected = Polynomial::new(&f);
+      expected.term(&f.exp(&BigInt::from(2), &BigInt::from(i)), 0);
+      assert!(poly.clone().exp(i).is_equal(&expected));
+    }
+  }
 
   #[test]
   fn should_scale_polynomial() {
