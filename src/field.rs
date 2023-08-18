@@ -14,6 +14,14 @@ impl Field {
     }
   }
 
+  pub fn bigint_to_u32(v: &BigInt) -> u32 {
+    let (_, digits) = v.to_u32_digits();
+    if digits.len() != 1 {
+      panic!("invalid bigint digits len for u32 conversion");
+    }
+    digits[0]
+  }
+
   pub fn bigintf(val: i32) -> BigInt {
     BigInt::from(val)
   }
@@ -23,40 +31,40 @@ impl Field {
   }
 
   pub fn bigint(&self, val: i32) -> BigInt {
-    self.modd(Field::bigintf(val))
+    self.modd(&Field::bigintf(val))
   }
 
   pub fn biguint(&self, val: u32) -> BigInt {
-    self.modd(BigInt::new(Sign::Plus, vec!(val)))
+    self.modd(&BigInt::new(Sign::Plus, vec!(val)))
   }
 
   pub fn zero() -> BigInt {
-    BigInt::new(Sign::Plus, vec!(0))
+    BigInt::from(0)
   }
 
   pub fn one() -> BigInt {
-    BigInt::new(Sign::Plus, vec!(1))
+    BigInt::from(1)
   }
 
-  pub fn modd(&self, v: BigInt) -> BigInt {
-    if v < Field::zero() {
-      return (&v + &self.p * (1 + (&v * -1) / &self.p)) % &self.p;
-    } else if v >= self.p {
+  pub fn modd(&self, v: &BigInt) -> BigInt {
+    if v < &Field::zero() {
+      return (v + &self.p * (1 + (v * -1) / &self.p)) % &self.p;
+    } else if v >= &self.p {
       return v % &self.p;
     }
-    v
+    v.clone()
   }
 
   pub fn add(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
-    self.modd(v1 + v2)
+    self.modd(&(v1 + v2))
   }
 
   pub fn mul(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
-    self.modd(v1 * v2)
+    self.modd(&(v1 * v2))
   }
 
   pub fn sub(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
-    self.modd(v1 - v2)
+    self.modd(&(v1 - v2))
   }
 
   pub fn neg(&self, v: &BigInt) -> BigInt {
@@ -69,7 +77,7 @@ impl Field {
 
   // exponent should always be > 0
   pub fn exp(&self, v: &BigInt, e: &BigInt) -> BigInt {
-    self.modd(v.clone()).modpow(e, &self.p)
+    self.modd(&v.clone()).modpow(e, &self.p)
   }
 
   pub fn generator(&self, size: &BigInt) -> BigInt {
@@ -85,7 +93,7 @@ impl Field {
   }
 
   pub fn inv(&self, v: &BigInt) -> BigInt {
-    let mut val = self.modd(v.clone());
+    let mut val = self.modd(&v.clone());
     if val == Field::zero() {
       panic!("divide by zero");
     }
@@ -103,12 +111,16 @@ impl Field {
       y = x - q * y;
       x = t;
     }
-    self.modd(x)
+    self.modd(&x)
   }
 
   pub fn random(&self) -> BigInt {
     let mut rng = rand::thread_rng();
     self.bigint(rng.gen())
+  }
+
+  pub fn sample(&self, input: &BigInt) -> BigInt {
+    self.modd(input)
   }
 
 }

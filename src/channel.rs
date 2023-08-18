@@ -24,6 +24,10 @@ impl Channel {
     self.messages.push(msg);
   }
 
+  pub fn push_single(&mut self, message: &BigUint) {
+    self.push(&vec!(message.clone()))
+  }
+
   pub fn pull(&mut self) -> &Message {
     // will panic if pulling past end of message vec
     let m = &self.messages[self.read_index];

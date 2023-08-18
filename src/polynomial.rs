@@ -172,7 +172,7 @@ impl Polynomial {
     for i in 0..self.coefs.len() {
       out += &self.coefs[i] * self.field.exp(v, &self.field.bigint(i.try_into().unwrap()));
     }
-    self.field.modd(out)
+    self.field.modd(&out)
   }
 
   // remove and return the largest non-zero coefficient
