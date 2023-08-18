@@ -146,8 +146,8 @@ impl Fri {
     indices
   }
 
-  fn verify(&self, channel: & mut Channel) -> Vec<Vec<BigUint>> {
-    let mut out: Vec<Vec<BigUint>> = Vec::new();
+  fn verify(&self, channel: & mut Channel) -> Vec<(BigUint, BigUint)> {
+    let mut out: Vec<(BigUint, BigUint)> = Vec::new();
     let mut omega = self.omega.clone();
     let mut offset = self.offset.clone();
 
@@ -212,8 +212,8 @@ impl Fri {
         bb.push(by.clone());
         cc.push(cy.clone());
         if i == 0 {
-          out.push(vec!(BigUint::from(indices_a[j]), y_points_msg.data[0].clone()));
-          out.push(vec!(BigUint::from(indices_b[j]), y_points_msg.data[1].clone()));
+          out.push((BigUint::from(indices_a[j]), y_points_msg.data[0].clone()));
+          out.push((BigUint::from(indices_b[j]), y_points_msg.data[1].clone()));
         }
 
         let ax = self.field.mul(&offset, &self.field.exp(&omega, &BigInt::from(indices_a[j])));
