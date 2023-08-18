@@ -48,15 +48,15 @@ impl Fri {
     );
     let mut indices: Vec<u32> = top_indices.clone();
     for i in 0..(codewords.len() - 1) {
-      indices = indices.to_vec().iter().map(|index| index % u32::try_from(codewords[i].len() >> 1).unwrap()).collect();
+      indices = indices.iter().map(|index| index % u32::try_from(codewords[i].len() >> 1).unwrap()).collect();
       self.query(&codewords[i], &codewords[i+1], &indices, channel);
     }
     top_indices
   }
 
-  fn query(&self, current_codeword: &Vec<BigUint>, next_codeword: &Vec<BigUint>, indices_c: &Vec<u32>, channel: & mut Channel) -> Vec<u32> {
+  fn query(&self, current_codeword: &Vec<BigUint>, next_codeword: &Vec<BigUint>, indices_c: &Vec<u32>, channel: & mut Channel) {
     let indices_a: Vec<u32> = indices_c.to_vec();
-    let indices_b: Vec<u32> = indices_c.to_vec().iter().map(|val| val + ((current_codeword.len() >> 1) as u32)).collect();
+    let indices_b: Vec<u32> = indices_c.iter().map(|val| val + ((current_codeword.len() >> 1) as u32)).collect();
     for i in 0..usize::try_from(self.colinearity_test_count).unwrap() {
       channel.push(&vec!(
         current_codeword[usize::try_from(indices_a[i]).unwrap()].clone(),
@@ -69,10 +69,6 @@ impl Fri {
       channel.push(&Tree::open(indices_b[i], &current_codeword).0);
       channel.push(&Tree::open(indices_c[i], &next_codeword).0);
     }
-    let mut out: Vec<u32> = Vec::new();
-    out.append(& mut indices_a.clone());
-    out.append(& mut indices_b.clone());
-    out
   }
 
   fn commit(&self, codeword: &Vec<BigUint>, channel: & mut Channel) -> Vec<Vec<BigUint>> {
@@ -97,7 +93,7 @@ impl Fri {
       let next_len = codeword.len() >> 1;
       // let mut next_codeword: Vec<BigUint> = vec!(BigUint::from(0 as u32); next_len);
       // next_codeword.clone_from_slice(&codeword[0..next_len]);
-      codeword = codeword.to_vec().iter().enumerate().map(|(index, val)| {
+      codeword = codeword.iter().enumerate().map(|(index, val)| {
         if index >= next_len {
           return zero.clone();
         }
@@ -179,11 +175,11 @@ impl Fri {
       panic!("omega order incorrect");
     }
 
-    let last_domain = last_codeword.to_vec().iter().enumerate().map(|(index, _)| {
+    let last_domain = last_codeword.iter().enumerate().map(|(index, _)| {
       return self.field.mul(&last_offset, &self.field.exp(&last_omega, &BigInt::from(index)));
     }).collect();
 
-    let poly = Polynomial::lagrange(&last_domain, &last_codeword.to_vec().iter().map(|v| v.to_bigint().unwrap()).collect(), &self.field);
+    let poly = Polynomial::lagrange(&last_domain, &last_codeword.iter().map(|v| v.to_bigint().unwrap()).collect(), &self.field);
     for i in 0..last_domain.len() {
       if poly.eval(&last_domain[i]) != last_codeword[i].clone().to_bigint().unwrap() {
         panic!("interpolated polynomial is incorrect");
@@ -200,9 +196,9 @@ impl Fri {
       self.colinearity_test_count
     );
     for i in 0..usize::try_from(self.round_count() - 1).unwrap() {
-      let indices_c: Vec<u32> = top_indices.to_vec().iter().map(|val| val % (self.domain_len >> (i+1))).collect();
+      let indices_c: Vec<u32> = top_indices.iter().map(|val| val % (self.domain_len >> (i+1))).collect();
       let indices_a: Vec<u32> = indices_c.clone();
-      let indices_b: Vec<u32> = indices_a.to_vec().iter().map(|val| val + (self.domain_len >> (i+1))).collect();
+      let indices_b: Vec<u32> = indices_a.iter().map(|val| val + (self.domain_len >> (i+1))).collect();
 
       let mut aa: Vec<BigUint> = Vec::new();
       let mut bb: Vec<BigUint> = Vec::new();
@@ -258,7 +254,7 @@ mod tests {
     let domain_g = f.generator(&BigInt::from(domain_size));
 
     let fri = Fri {
-      offset: BigInt::from(5),
+      offset: g.clone(),
       omega: domain_g.clone(),
       domain_len: domain_size,
       field: Rc::clone(&f),
