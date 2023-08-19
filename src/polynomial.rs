@@ -263,6 +263,17 @@ impl Polynomial {
     let poly = Polynomial::lagrange(x_vals, y_vals, field);
     return poly.degree() <= 1;
   }
+
+  pub fn zeroifier(points: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
+    let mut out = Polynomial::new(field);
+    out.term(&BigInt::from(1), 0);
+    let mut x = Polynomial::new(field);
+    x.term(&BigInt::from(1), 1);
+    for p in points {
+      out.mul(&x.clone().term(&field.neg(&p), 0));
+    }
+    out
+  }
 }
 
 #[cfg(test)]
@@ -543,5 +554,25 @@ mod tests {
     expected.term(&f.bigint(40), 2);
     expected.term(&f.bigint(400), 0);
     assert!(poly3.is_equal(&expected));
+  }
+
+  #[test]
+  fn should_build_zeroifier_polynomial() {
+    let p = Field::biguintf(3221225473);
+    let g = Field::bigintf(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let s = 128;
+    let size = BigInt::from(s);
+    let domain_g = f.generator(&size);
+    let mut domain: Vec<BigInt> = Vec::new();
+    for i in 0..s {
+      domain.push(f.exp(&domain_g, &BigInt::from(i)));
+    }
+
+    let poly = Polynomial::zeroifier(&domain, &f);
+    for i in 0..s {
+      assert_eq!(poly.eval(&domain[i]), BigInt::from(0));
+    }
   }
 }
