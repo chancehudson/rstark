@@ -9,6 +9,10 @@ pub struct Polynomial {
 }
 
 impl Polynomial {
+  pub fn field(&self) -> &Rc<Field> {
+    &self.field
+  }
+
   pub fn new(f: &Rc<Field>) -> Polynomial {
     Polynomial {
       field: Rc::clone(f),
