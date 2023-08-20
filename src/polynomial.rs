@@ -179,6 +179,10 @@ impl Polynomial {
     self.field.modd(&out)
   }
 
+  pub fn eval_batch(&self, vals: &Vec<BigInt>) -> Vec<BigInt> {
+    vals.iter().map(|v| self.eval(v)).collect()
+  }
+
   // remove and return the largest non-zero coefficient
   // coef, exp
   pub fn pop_term(& mut self) -> (BigInt, usize) {
@@ -265,6 +269,10 @@ impl Polynomial {
   }
 
   pub fn zeroifier(points: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
+    Self::zeroifier_slice(&points[0..], field)
+  }
+
+  pub fn zeroifier_slice(points: &[BigInt], field: &Rc<Field>) -> Polynomial {
     let mut out = Polynomial::new(field);
     out.term(&BigInt::from(1), 0);
     let mut x = Polynomial::new(field);

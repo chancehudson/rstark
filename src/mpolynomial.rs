@@ -149,6 +149,18 @@ impl MPolynomial {
     out
   }
 
+  pub fn variables(count: u32, field: &Rc<Field>) -> Vec<MPolynomial> {
+    let mut out: Vec<MPolynomial> = Vec::new();
+    for i in 0..count {
+      let mut p = MPolynomial::new(field);
+      let mut exps: Vec<u32> = vec!(0; usize::try_from(i).unwrap());
+      exps.push(1);
+      p.term(&BigInt::from(1), &exps);
+      out.push(p);
+    }
+    out
+  }
+
 }
 
 #[cfg(test)]

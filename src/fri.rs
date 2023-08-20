@@ -7,12 +7,12 @@ use crate::channel::Channel;
 use crate::polynomial::Polynomial;
 
 pub struct Fri {
-  offset: BigInt,
-  omega: BigInt,
-  domain_len: u32,
-  field: Rc<Field>,
-  expansion_factor: u32,
-  colinearity_test_count: u32
+  pub offset: BigInt,
+  pub omega: BigInt,
+  pub domain_len: u32,
+  pub field: Rc<Field>,
+  pub expansion_factor: u32,
+  pub colinearity_test_count: u32
 }
 
 impl Fri {
@@ -26,7 +26,7 @@ impl Fri {
     num_rounds
   }
 
-  fn eval_domain(&self) -> Vec<BigInt> {
+  pub fn eval_domain(&self) -> Vec<BigInt> {
     let mut domain: Vec<BigInt> = Vec::new();
     for i in 0..self.domain_len {
       // TODO: sequential multiplication instead of repeated exp
@@ -35,7 +35,7 @@ impl Fri {
     domain
   }
 
-  fn prove(&self, codeword: &Vec<BigUint>, channel: & mut Channel) -> Vec<u32> {
+  pub fn prove(&self, codeword: &Vec<BigUint>, channel: & mut Channel) -> Vec<u32> {
     if self.domain_len != codeword.len().try_into().unwrap() {
       panic!("initial codeword does not match domain len");
     }
@@ -146,8 +146,8 @@ impl Fri {
     indices
   }
 
-  fn verify(&self, channel: & mut Channel) -> Vec<(BigUint, BigUint)> {
-    let mut out: Vec<(BigUint, BigUint)> = Vec::new();
+  pub fn verify(&self, channel: & mut Channel) -> Vec<(u32, BigUint)> {
+    let mut out: Vec<(u32, BigUint)> = Vec::new();
     let mut omega = self.omega.clone();
     let mut offset = self.offset.clone();
 
@@ -212,8 +212,8 @@ impl Fri {
         bb.push(by.clone());
         cc.push(cy.clone());
         if i == 0 {
-          out.push((BigUint::from(indices_a[j]), y_points_msg.data[0].clone()));
-          out.push((BigUint::from(indices_b[j]), y_points_msg.data[1].clone()));
+          out.push((indices_a[j], y_points_msg.data[0].clone()));
+          out.push((indices_b[j], y_points_msg.data[1].clone()));
         }
 
         let ax = self.field.mul(&offset, &self.field.exp(&omega, &BigInt::from(indices_a[j])));

@@ -38,6 +38,10 @@ impl Field {
     self.modd(&BigInt::new(Sign::Plus, vec!(val)))
   }
 
+  pub fn g(&self) -> BigInt {
+    self.g.clone()
+  }
+
   pub fn zero() -> BigInt {
     BigInt::from(0)
   }
@@ -75,9 +79,9 @@ impl Field {
     self.mul(v1, &self.inv(v2))
   }
 
-  // exponent should always be > 0
+  // exponent should always be >= 0
   pub fn exp(&self, v: &BigInt, e: &BigInt) -> BigInt {
-    self.modd(&v.clone()).modpow(e, &self.p)
+    self.modd(v).modpow(e, &self.p)
   }
 
   pub fn generator(&self, size: &BigInt) -> BigInt {
