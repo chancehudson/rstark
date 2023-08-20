@@ -80,7 +80,7 @@ impl Stark {
     let mut out: Vec<u32> = Vec::new();
     for t in constraints {
       let mut largest = 0;
-      for (exps, coef) in t.exps() {
+      for (exps, _) in t.exps() {
         let mut sum = 0;
         for i in 0..point_degrees.len() {
           sum += exps.get(i).unwrap_or(&0) * point_degrees[i];
@@ -118,10 +118,10 @@ impl Stark {
   fn boundary_zeroifiers(&self, boundary: &Vec<(u32, u32, BigInt)>) -> Vec<Polynomial> {
     let mut zeroifiers: Vec<Polynomial> = Vec::new();
     for i in 0..self.register_count {
-      let mut points: Vec<BigInt> = boundary
+      let points: Vec<BigInt> = boundary
         .iter()
-        .filter(|(c, r, v)| r == &i)
-        .map(|(c, r, v)| self.field.exp(&self.omicron, &BigInt::from(c.clone())))
+        .filter(|(_c, r, _v)| r == &i)
+        .map(|(c, _r, _v)| self.field.exp(&self.omicron, &BigInt::from(c.clone())))
         .collect();
       zeroifiers.push(Polynomial::zeroifier(&points, &self.field));
     }
@@ -166,9 +166,9 @@ impl Stark {
     let mut trace = trace.clone();
     let mut channel = Channel::new();
 
-    for i in 0..self.randomizer_count {
+    for _ in 0..self.randomizer_count {
       let mut r: Vec<BigInt> = Vec::new();
-      for j in 0..self.register_count {
+      for _ in 0..self.register_count {
         r.push(self.field.random());
       }
       trace.push(r);
@@ -305,14 +305,14 @@ impl Stark {
     for bqc in boundary_quotient_codewords {
       for index in quadrupled_indices.clone() {
         channel.push_single(&bqc[usize::try_from(index).unwrap()]);
-        let (path, root) = Tree::open(index, &bqc);
+        let (path, _) = Tree::open(index, &bqc);
         channel.push(&path);
       }
     }
 
     for index in quadrupled_indices {
       channel.push_single(&randomizer_codeword[usize::try_from(index).unwrap()]);
-      let (path, root) = Tree::open(index, &randomizer_codeword);
+      let (path, _) = Tree::open(index, &randomizer_codeword);
       channel.push(&path);
     }
 
@@ -331,7 +331,7 @@ impl Stark {
     let randomized_trace_len = original_trace_len + self.randomizer_count;
 
     let mut boundary_quotient_roots: Vec<BigUint> = Vec::new();
-    for i in 0..self.register_count {
+    for _ in 0..self.register_count {
       boundary_quotient_roots.push(channel.pull().data[0].clone());
     }
 
@@ -341,15 +341,15 @@ impl Stark {
     let weights = self.sample_weights(count, &channel.verifier_hash().to_bigint().unwrap());
 
     let mut polynomial_vals = self.fri.verify(channel);
-    polynomial_vals.sort_by(|(ax, ay), (bx, by)| {
+    polynomial_vals.sort_by(|(ax, _ay), (bx, _by)| {
       if ax > bx {
         return Ordering::Greater;
       }
       return Ordering::Less;
     });
 
-    let indices: Vec<u32> = polynomial_vals.iter().map(|(x, y)| x.clone()).collect();
-    let values: Vec<BigUint> = polynomial_vals.iter().map(|(x, y)| y.clone()).collect();
+    let indices: Vec<u32> = polynomial_vals.iter().map(|(x, _y)| x.clone()).collect();
+    let values: Vec<BigUint> = polynomial_vals.iter().map(|(_x, y)| y.clone()).collect();
 
     let mut duplicated_indices = indices.clone();
     duplicated_indices.extend(indices.iter().map(|v| (v + self.expansion_factor) % self.fri_domain_len).collect::<Vec<u32>>());
