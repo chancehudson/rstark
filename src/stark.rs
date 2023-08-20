@@ -384,6 +384,13 @@ impl Stark {
       randomizer_map.insert(i, val);
     }
 
+    let transition_quotient_degree_bounds = self.transition_quotient_degree_bounds(&transition_constraints);
+    let boundary_quotient_degree_bounds = self.boundary_quotient_degree_bounds(randomized_trace_len, &boundary);
+    let boundary_zeroifiers = self.boundary_zeroifiers(&boundary);
+    let boundary_interpolants = self.boundary_interpolants(&boundary);
+    let transition_zeroifier = self.transition_zeroifier();
+    let transition_constraints_max_degree = self.max_degree(&transition_constraints);
+
     for i in 0..indices.len() {
       let current_index = indices[i];
       let domain_current_index = self.field.mul(&self.field.g(), &self.field.exp(&self.omega, &BigInt::from(current_index)));
@@ -393,8 +400,8 @@ impl Stark {
       let mut next_trace = vec!(BigInt::from(0); usize::try_from(self.register_count).unwrap());
 
       for j in 0..usize::try_from(self.register_count).unwrap() {
-        let zeroifier = self.boundary_zeroifiers(&boundary)[j].clone();
-        let interpolant = self.boundary_interpolants(&boundary)[j].clone();
+        let zeroifier = &boundary_zeroifiers[j];
+        let interpolant = &boundary_interpolants[j];
 
         current_trace[j] = self.field.add(
           &self.field.mul(&leaves[j].get(&current_index).unwrap().to_bigint().unwrap(), &zeroifier.eval(&domain_current_index)),
@@ -417,16 +424,16 @@ impl Stark {
       terms.push(randomizer_map.get(&current_index).unwrap().to_bigint().unwrap());
       for j in 0..transition_constraint_values.len() {
         let tcv = &transition_constraint_values[j];
-        let q = self.field.div(tcv, &self.transition_zeroifier().eval(&domain_current_index));
+        let q = self.field.div(tcv, &transition_zeroifier.eval(&domain_current_index));
         terms.push(q.clone());
-        let shift = self.max_degree(&transition_constraints) - self.transition_quotient_degree_bounds(&transition_constraints)[j];
+        let shift = transition_constraints_max_degree - transition_quotient_degree_bounds[j];
         terms.push(self.field.mul(&q, &self.field.exp(&domain_current_index, &BigInt::from(shift))));
       }
 
       for j in 0..usize::try_from(self.register_count).unwrap() {
         let bqv = leaves[j].get(&current_index).unwrap().to_bigint().unwrap();
         terms.push(bqv.clone());
-        let shift = self.max_degree(&transition_constraints) - self.boundary_quotient_degree_bounds(randomized_trace_len, &boundary)[j];
+        let shift = transition_constraints_max_degree - boundary_quotient_degree_bounds[j];
         terms.push(self.field.mul(&bqv, &self.field.exp(&domain_current_index, &BigInt::from(shift))));
       }
 
