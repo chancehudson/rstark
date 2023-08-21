@@ -171,12 +171,15 @@ impl Polynomial {
     self.coefs.resize(new_len, zero);
   }
 
+  // using horners method
+  // https://en.wikipedia.org/wiki/Horner%27s_method
   pub fn eval(&self, v: &BigInt) -> BigInt {
-    let mut out = Field::zero();
-    for i in 0..self.coefs.len() {
-      out += &self.coefs[i] * self.field.exp(v, &self.field.bigint(i.try_into().unwrap()));
+    let mut out = self.field.mul(&v, &self.coefs[self.coefs.len() - 1]);
+    for coef in self.coefs[1..(self.coefs.len()-1)].iter().rev() {
+      out = self.field.mul(&v, &self.field.ladd(&coef, &out));
     }
-    self.field.modd(&out)
+    out = self.field.add(&out, &self.coefs[0]);
+    out
   }
 
   pub fn eval_batch(&self, vals: &Vec<BigInt>) -> Vec<BigInt> {
