@@ -349,8 +349,8 @@ mod tests {
 
   #[test]
   fn should_test_colinearity() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let mut poly = Polynomial::new(&f);
@@ -367,8 +367,8 @@ mod tests {
 
   #[test]
   fn should_compose_polynomial() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let mut root = Polynomial::new(&f);
@@ -395,8 +395,8 @@ mod tests {
 
   #[test]
   fn should_exp_polynomial() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let mut poly = Polynomial::new(&f);
@@ -411,8 +411,8 @@ mod tests {
 
   #[test]
   fn should_scale_polynomial() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let mut poly = Polynomial::new(&f);
@@ -434,8 +434,8 @@ mod tests {
 
   #[test]
   fn should_interpolate_lagrange() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let size = 32;
@@ -457,8 +457,8 @@ mod tests {
   #[test]
   #[should_panic]
   fn should_fail_to_div_by_zero() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let mut poly = Polynomial::new(&f);
@@ -471,8 +471,8 @@ mod tests {
 
   #[test]
   fn should_divide_polynomial() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let mut poly1 = Polynomial::new(&f);
@@ -500,8 +500,8 @@ mod tests {
 
   #[test]
   fn should_eval_polynomial() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     // 9x^3 - 4x^2 - 20
@@ -516,8 +516,8 @@ mod tests {
 
   #[test]
   fn should_eval_polynomial_with_batch_fast() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let mut poly = Polynomial::new(&f);
@@ -540,8 +540,8 @@ mod tests {
 
   #[test]
   fn should_eval_polynomial_with_fft() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let mut poly = Polynomial::new(&f);
@@ -565,8 +565,8 @@ mod tests {
 
   #[test]
   fn should_check_polynomial_equality() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Rc::new(Field::new(p, g));
 
     let mut poly1 = Polynomial::new(&f);
@@ -581,8 +581,8 @@ mod tests {
 
   #[test]
   fn should_add_polynomials() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Rc::new(Field::new(p, g));
 
     // 2x^2 - 20
@@ -612,8 +612,8 @@ mod tests {
 
   #[test]
   fn should_subtract_polynomials() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Rc::new(Field::new(p, g));
 
     // 2x^2 - 20
@@ -645,8 +645,8 @@ mod tests {
 
   #[test]
   fn should_multiply_polynomials() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Rc::new(Field::new(p, g));
 
     // 2x^2 - 20
@@ -674,8 +674,8 @@ mod tests {
 
   #[test]
   fn should_build_zeroifier_polynomial() {
-    let p = Field::biguintf(3221225473);
-    let g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     let s = 128;

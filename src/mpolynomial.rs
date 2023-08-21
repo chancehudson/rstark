@@ -181,8 +181,8 @@ mod tests {
 
   #[test]
   fn should_add_sub_multipolynomials() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Rc::new(Field::new(p, g));
 
     // 4x + 2y^2 + 9
@@ -217,8 +217,8 @@ mod tests {
 
   #[test]
   fn should_mul_multipolynomials() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Rc::new(Field::new(p, g));
 
     // 4x + 2y^2 + 9
@@ -250,8 +250,8 @@ mod tests {
 
   #[test]
   fn should_eval_multipolynomial() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Rc::new(Field::new(p, g));
 
     // 4x + 2y^2 + 9
@@ -269,8 +269,8 @@ mod tests {
 
   #[test]
   fn should_eval_symbolic_multipolynomial() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Rc::new(Field::new(p, g));
 
     // 4x + 2y^2 + 9
@@ -297,8 +297,8 @@ mod tests {
 
   #[test]
   fn should_make_multipolynomial_from_polynomial() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Rc::new(Field::new(p, g));
 
     // 4x + 8x^2 + 9

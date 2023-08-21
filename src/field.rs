@@ -26,16 +26,8 @@ impl Field {
     digits[0]
   }
 
-  pub fn bigintf(val: i32) -> BigInt {
-    BigInt::from(val)
-  }
-
-  pub fn biguintf(val: u32) -> BigInt {
-    BigInt::from(val)
-  }
-
   pub fn bigint(&self, val: i32) -> BigInt {
-    self.modd(&Field::bigintf(val))
+    self.modd(&BigInt::from(val))
   }
 
   pub fn biguint(&self, val: u32) -> BigInt {
@@ -149,8 +141,8 @@ mod tests {
 
   #[test]
   fn should_make_bigint() {
-    let p = Field::bigintf(101);
-    let f = Field::new(p, Field::bigintf(0));
+    let p = BigInt::from(101);
+    let f = Field::new(p, BigInt::from(0));
     assert_eq!(f.bigint(0), BigInt::new(Sign::Minus, vec!(0)));
     assert_eq!(f.bigint(-29), BigInt::new(Sign::Plus , vec!(72)));
     assert_eq!(f.bigint(32), BigInt::new(Sign::Plus, vec!(32)));
@@ -160,8 +152,8 @@ mod tests {
 
   #[test]
   fn should_add_two_elements() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Field::new(p, g);
 
     let x = f.bigint(40);
@@ -172,8 +164,8 @@ mod tests {
 
   #[test]
   fn should_mul_two_elements() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Field::new(p, g);
 
     let x = f.bigint(40);
@@ -184,8 +176,8 @@ mod tests {
 
   #[test]
   fn should_sub_two_elements() {
-    let p = Field::bigintf(101);
-    let g = Field::bigintf(0);
+    let p = BigInt::from(101);
+    let g = BigInt::from(0);
     let f = Field::new(p, g);
 
     let x = f.bigint(2);
@@ -196,8 +188,8 @@ mod tests {
 
   #[test]
   fn should_get_generator() {
-    let p = Field::biguintf(3221225473);
-    let f_g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let f_g = BigInt::from(5);
     let f = Field::new(p, f_g);
 
     for i in 1..10 {
@@ -208,8 +200,8 @@ mod tests {
 
   #[test]
   fn should_get_inverse() {
-    let p = Field::biguintf(3221225473);
-    let f_g = Field::bigintf(5);
+    let p = BigInt::from(3221225473_u32);
+    let f_g = BigInt::from(5);
     let f = Field::new(p, f_g);
 
     for i in 1..99 {
