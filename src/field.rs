@@ -64,12 +64,24 @@ impl Field {
     self.modd(&(v1 + v2))
   }
 
+  pub fn ladd(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
+    v1 + v2
+  }
+
   pub fn mul(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
     self.modd(&(v1 * v2))
   }
 
+  pub fn lmul(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
+    v1 * v2
+  }
+
   pub fn sub(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
     self.modd(&(v1 - v2))
+  }
+
+  pub fn lsub(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
+    v1 - v2
   }
 
   pub fn neg(&self, v: &BigInt) -> BigInt {

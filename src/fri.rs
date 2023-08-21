@@ -127,13 +127,13 @@ impl Fri {
         let inv_omega = self.field.inv(&self.field.mul(&offset, &self.field.exp
 (&omega, &BigInt::from(index))));
         // ( (one + alpha / (offset * (omega^i)) ) * codeword[i]
-        let a = self.field.mul(&ival, &self.field.add(&Field::one(), &self.field.mul(&alpha, &inv_omega)));
+        let a = self.field.mul(&ival, &self.field.ladd(&Field::one(), &self.field.mul(&alpha, &inv_omega)));
         //  (one - alpha / (offset * (omega^i)) ) * codeword[len(codeword)//2 + i] ) for i in range(len(codeword)//2)]
         let b = self.field.mul(
-          &self.field.sub(&Field::one(), &self.field.mul(&alpha, &inv_omega)),
+          &self.field.lsub(&Field::one(), &self.field.lmul(&alpha, &inv_omega)),
           &codeword[(codeword.len() >> 1) + index].to_bigint().unwrap()
         );
-        return self.field.mul(&two_inv, &self.field.add(&a, &b)).to_biguint().unwrap();
+        return self.field.mul(&two_inv, &self.field.ladd(&a, &b)).to_biguint().unwrap();
       }).collect();
 
       omega = self.field.mul(&omega, &omega);

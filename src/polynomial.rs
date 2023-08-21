@@ -113,7 +113,7 @@ impl Polynomial {
       for j in 0..self.coefs.len() {
         // combine the exponents
         let e = j + i;
-        out[e] = self.field.add(&out[e], &self.field.mul(&self.coefs[j], &poly.coefs()[i]));
+        out[e] = self.field.add(&out[e], &self.field.lmul(&self.coefs[j], &poly.coefs()[i]));
       }
     }
     self.coefs = out;

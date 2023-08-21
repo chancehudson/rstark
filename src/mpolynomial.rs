@@ -129,7 +129,7 @@ impl MPolynomial {
         if exps[i] == 0 {
           continue;
         }
-        inter = self.field.mul(&inter, &self.field.exp(&points[i], &BigInt::from(exps[i])));
+        inter = self.field.lmul(&inter, &self.field.exp(&points[i], &BigInt::from(exps[i])));
       }
       out = self.field.add(&out, &inter);
     }
