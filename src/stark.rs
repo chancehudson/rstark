@@ -465,7 +465,7 @@ mod tests {
     let stark = Stark::new(
       &g.clone(),
       &f,
-      1,
+      2,
       sequence_len,
       4,
       8,
@@ -473,28 +473,39 @@ mod tests {
     );
 
     let mut trace: Vec<Vec<BigInt>> = Vec::new();
-    trace.push(vec!(BigInt::from(2)));
-    trace.push(vec!(BigInt::from(4)));
+    trace.push(vec!(BigInt::from(2), BigInt::from(3)));
+    trace.push(vec!(BigInt::from(4), BigInt::from(9)));
     while trace.len() < sequence_len.try_into().unwrap() {
       let e1 = &trace[trace.len() - 1][0];
-      trace.push(vec!(f.mul(e1, e1)));
+      let e2 = &trace[trace.len() - 1][1];
+      trace.push(vec!(f.mul(e1, e1), f.mul(e2, e2)));
     }
 
     let boundary_constraints = vec!(
       (0, 0, BigInt::from(2)),
-      (sequence_len-1, 0, trace[trace.len()-1][0].clone())
+      (0, 1, BigInt::from(3)),
+      (sequence_len-1, 0, trace[trace.len()-1][0].clone()),
+      (sequence_len-1, 1, trace[trace.len()-1][1].clone())
     );
 
-    let variables = MPolynomial::variables(3, &f);
+    let variables = MPolynomial::variables(1+2*2, &f);
 
     let cycle_index = &variables[0];
-    let prev_state = &variables[1];
-    let next_state = &variables[2];
+    let prev_state = &variables[1..3];
+    let next_state = &variables[3..];
     let mut transition_constraints: Vec<MPolynomial> = Vec::new();
-    let mut c = prev_state.clone();
-    c.mul(prev_state);
-    c.sub(next_state);
-    transition_constraints.push(c);
+    {
+      let mut c = prev_state[0].clone();
+      c.mul(&prev_state[0]);
+      c.sub(&next_state[0]);
+      transition_constraints.push(c);
+    }
+    {
+      let mut c = prev_state[1].clone();
+      c.mul(&prev_state[1]);
+      c.sub(&next_state[1]);
+      transition_constraints.push(c);
+    }
 
     let proof = stark.prove(&trace, &transition_constraints, &boundary_constraints);
     stark.verify(&proof, &transition_constraints, &boundary_constraints);

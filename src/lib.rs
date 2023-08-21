@@ -26,6 +26,7 @@ pub struct ProveInput {
 #[derive(Serialize, Deserialize)]
 pub struct VerifyInput {
   trace_len: u32,
+  register_count: u32,
   transition_constraints: Vec<HashMap<Vec<u32>, BigUint>>,
   boundary: Vec<(u32, u32, BigUint)>
 }
@@ -38,11 +39,18 @@ pub fn prove(input: JsValue) -> String {
   let p = BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119);
   let g = BigInt::from(85408008396924667383611388730472331217_u128);
   let f = Rc::new(Field::new(p, g.clone()));
+  let register_count = input.trace[0].len();
+  for i in 1..input.trace.len() {
+    if input.trace[i].len() != register_count {
+      log("inconsistent trace register count");
+      panic!();
+    }
+  }
 
   let stark = Stark::new(
     &g.clone(),
     &f,
-    1,
+    u32::try_from(register_count).unwrap(),
     input.trace.len().try_into().unwrap(),
     4,
     8,
@@ -76,7 +84,7 @@ pub fn verify(proof: String, input: JsValue) {
   let stark = Stark::new(
     &g.clone(),
     &f,
-    1,
+    input.register_count,
     input.trace_len,
     4,
     8,
