@@ -174,10 +174,9 @@ impl Stark {
       trace.push(r);
     }
 
-    let mut trace_domain: Vec<BigInt> = Vec::new();
-    for i in 0..trace.len() {
-      trace_domain.push(self.field.exp(&self.omicron, &BigInt::from(i)));
-    }
+    let mut trace_domain: Vec<BigInt> = vec!(BigInt::from(0); trace.len());
+    trace_domain.clone_from_slice(&self.omicron_domain[0..trace.len()]);
+
     let mut trace_polys: Vec<Polynomial> = Vec::new();
     for i in 0..self.register_count {
       let trace_vals: Vec<BigInt> = trace

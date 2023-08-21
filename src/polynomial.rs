@@ -183,6 +183,62 @@ impl Polynomial {
     vals.iter().map(|v| self.eval(v)).collect()
   }
 
+  // https://en.wikipedia.org/wiki/Polynomial_evaluation#Multipoint_evaluation
+  pub fn eval_batch_fast(&self, vals: &Vec<BigInt>) -> Vec<BigInt> {
+    self.eval_batch_fast_(vals, vals.len(), 0)
+  }
+
+  fn eval_batch_fast_(&self,
+    vals: &Vec<BigInt>,
+    len: usize,
+    offset: usize
+    ) -> Vec<BigInt> {
+    if offset >= vals.len() {
+      return Vec::new();
+    }
+    let half = len >> 1;
+    if len == 1 || (offset + half) >= vals.len() {
+      return vec!(self.eval(&vals[offset]));
+    }
+
+    let left_zeroifier = Polynomial::zeroifier_slice(&vals[offset..(offset+half)], &self.field);
+    let right_zeroifier = Polynomial::zeroifier_slice(&vals[(offset+half)..(offset+len)], &self.field);
+    let (_, left_r) = self.div(&left_zeroifier);
+    let (_, right_r) = self.div(&right_zeroifier);
+
+    let mut left = left_r.eval_batch_fast_(vals, half, offset);
+    let right = right_r.eval_batch_fast_(vals, half, offset+half);
+    left.extend(right);
+    left
+  }
+
+  // Evaluate a polynomial over a multiplicative subgroup
+  // domain cannot be a coset
+  pub fn eval_batch_fft(&self, domain: &Vec<BigInt>) -> Vec<BigInt> {
+    Polynomial::eval_fft(&self.coefs(), domain, &self.field, 1, 0)
+  }
+
+  pub fn eval_fft(coefs: &Vec<BigInt>, domain: &Vec<BigInt>, field: &Rc<Field>, slice_len: u32, offset: u32) -> Vec<BigInt> {
+    let slice_len_usize = usize::try_from(slice_len).unwrap();
+
+    if domain.len()/slice_len_usize == 1 {
+      return vec!(coefs.get(usize::try_from(offset).unwrap()).unwrap_or(&BigInt::from(0)).clone());
+    }
+    let left_out = Self::eval_fft(coefs, domain, field, slice_len*2, offset);
+    let right_out = Self::eval_fft(coefs, domain, field, slice_len*2, offset + slice_len);
+
+    let mut out = vec!(BigInt::from(0); domain.len()/slice_len_usize);
+
+    for i in 0..(left_out.len()) {
+      let x = &left_out[i];
+      let y = &right_out[i];
+      let y_root = field.mul(y, &domain[i*slice_len_usize]);
+      out[i] = field.add(x, &y_root);
+      out[i+left_out.len()] = field.sub(x, &y_root);
+    }
+    out
+  }
+
   // remove and return the largest non-zero coefficient
   // coef, exp
   pub fn pop_term(& mut self) -> (BigInt, usize) {
@@ -453,6 +509,55 @@ mod tests {
 
     assert_eq!(f.bigint(-20), poly.eval(&f.bigint(0)));
     assert_eq!(f.bigint(-15), poly.eval(&f.bigint(1)));
+  }
+
+  #[test]
+  fn should_eval_polynomial_with_batch_fast() {
+    let p = Field::biguintf(3221225473);
+    let g = Field::bigintf(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let mut poly = Polynomial::new(&f);
+    for i in 0..50 {
+      poly.term(&f.random(), i);
+    }
+
+    let size = 2_u32.pow(7);
+    let mut G: Vec<BigInt> = Vec::new();
+    for i in 0..size {
+      G.push(BigInt::from(i));
+    }
+
+    let actual = poly.eval_batch(&G);
+    let out = poly.eval_batch_fast(&G);
+    for i in 0..usize::try_from(size).unwrap() {
+      assert_eq!(actual[i], out[i]);
+    }
+  }
+
+  #[test]
+  fn should_eval_polynomial_with_fft() {
+    let p = Field::biguintf(3221225473);
+    let g = Field::bigintf(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let mut poly = Polynomial::new(&f);
+    for i in 0..50 {
+      poly.term(&f.random(), i);
+    }
+
+    let size = 2_u32.pow(8);
+    let sub_g = f.generator(&BigInt::from(size));
+    let mut G: Vec<BigInt> = Vec::new();
+    for i in 0..size {
+      G.push(f.exp(&sub_g, &BigInt::from(i)));
+    }
+
+    let actual = poly.eval_batch(&G);
+    let out = poly.eval_batch_fft(&G);
+    for i in 0..usize::try_from(size).unwrap() {
+      assert_eq!(actual[i], out[i]);
+    }
   }
 
   #[test]
