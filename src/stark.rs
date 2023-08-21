@@ -6,7 +6,7 @@ use crate::polynomial::Polynomial;
 use crate::channel::Channel;
 use crate::mpolynomial::MPolynomial;
 use crate::tree::Tree;
-use crate::fri::Fri;
+use crate::fri::{Fri, FriOptions};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -48,14 +48,14 @@ impl Stark {
       omicron_domain.push(field.exp(&omicron, &BigInt::from(i)));
     }
 
-    let fri = Fri {
+    let fri = Fri::new(&FriOptions {
       offset: offset.clone(),
       omega: omega.clone(),
       domain_len: fri_domain_len,
-      field: Rc::clone(&field),
       expansion_factor,
-      colinearity_test_count
-    };
+      colinearity_test_count,
+    }, field);
+
     Stark {
       offset: offset.clone(),
       field: Rc::clone(field),
@@ -198,10 +198,9 @@ impl Stark {
       boundary_quotients.push(q.safe_div(zeroifier));
     }
 
-    let fri_domain = self.fri.eval_domain();
     let mut boundary_quotient_codewords: Vec<Vec<BigUint>> = Vec::new();
     for i in 0..usize::try_from(self.register_count).unwrap() {
-      let codewords: Vec<BigUint> = boundary_quotients[i].eval_batch(&fri_domain)
+      let codewords: Vec<BigUint> = boundary_quotients[i].eval_batch(self.fri.domain())
         .iter()
         .map(|v| v.to_biguint().unwrap())
         .collect();
@@ -233,7 +232,7 @@ impl Stark {
       randomizer_poly.term(&self.field.random(), i);
     }
 
-    let randomizer_codeword = randomizer_poly.eval_batch(&fri_domain)
+    let randomizer_codeword = randomizer_poly.eval_batch(self.fri.domain())
       .iter()
       .map(|v| v.to_biguint().unwrap())
       .collect();
@@ -280,7 +279,7 @@ impl Stark {
       combination.add(&w_poly);
     }
 
-    let combined_codeword = combination.eval_batch(&fri_domain)
+    let combined_codeword = combination.eval_batch(self.fri.domain())
       .iter()
       .map(|v| v.to_biguint().unwrap())
       .collect();

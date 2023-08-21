@@ -5,6 +5,15 @@ use std::rc::Rc;
 use crate::tree::Tree;
 use crate::channel::Channel;
 use crate::polynomial::Polynomial;
+use std::collections::HashMap;
+
+pub struct FriOptions {
+  pub offset: BigInt,
+  pub omega: BigInt,
+  pub domain_len: u32,
+  pub expansion_factor: u32,
+  pub colinearity_test_count: u32
+}
 
 pub struct Fri {
   pub offset: BigInt,
@@ -12,27 +21,49 @@ pub struct Fri {
   pub domain_len: u32,
   pub field: Rc<Field>,
   pub expansion_factor: u32,
-  pub colinearity_test_count: u32
+  pub colinearity_test_count: u32,
+  domain: Vec<BigInt>,
+  round_count: u32
 }
 
 impl Fri {
-  fn round_count(&self) -> u32 {
-    let mut codeword_len = self.domain_len;
-    let mut num_rounds = 0;
-    while codeword_len > self.expansion_factor && 4 * self.colinearity_test_count < codeword_len {
-      codeword_len /= 2;
-      num_rounds += 1;
+  pub fn new(options: &FriOptions, field: &Rc<Field>) -> Fri {
+    // build eval domain
+    let mut domain: Vec<BigInt> = Vec::new();
+    let mut exps: Vec<BigInt> = Vec::new();
+    exps.push(BigInt::from(1));
+    exps.push(options.omega.clone());
+    for i in 2..options.domain_len {
+      exps.push(field.mul(&exps[exps.len() - 1], &options.omega));
     }
-    num_rounds
+    for i in 0..usize::try_from(options.domain_len).unwrap() {
+      domain.push(field.mul(&options.offset, &exps[i]));
+    }
+    // calculate number of rounds
+    let mut codeword_len = options.domain_len;
+    let mut round_count = 0;
+    while codeword_len > options.expansion_factor && 4 * options.colinearity_test_count < codeword_len {
+      codeword_len /= 2;
+      round_count+= 1;
+    }
+    Fri {
+      offset: options.offset.clone(),
+      omega: options.omega.clone(),
+      domain_len: options.domain_len,
+      field: Rc::clone(field),
+      expansion_factor: options.expansion_factor,
+      colinearity_test_count: options.colinearity_test_count,
+      domain,
+      round_count
+    }
   }
 
-  pub fn eval_domain(&self) -> Vec<BigInt> {
-    let mut domain: Vec<BigInt> = Vec::new();
-    for i in 0..self.domain_len {
-      // TODO: sequential multiplication instead of repeated exp
-      domain.push(self.field.mul(&self.offset, &self.field.exp(&self.omega, &BigInt::from(i))));
-    }
-    domain
+  pub fn domain(&self) -> &Vec<BigInt> {
+    &self.domain
+  }
+
+  fn round_count(&self) -> u32 {
+    self.round_count
   }
 
   pub fn prove(&self, codeword: &Vec<BigUint>, channel: & mut Channel) -> Vec<u32> {
@@ -91,14 +122,10 @@ impl Fri {
       // of the previous codewords, similar to a FFT
       let alpha = self.field.sample(&channel.prover_hash().to_bigint().unwrap());
       let next_len = codeword.len() >> 1;
-      // let mut next_codeword: Vec<BigUint> = vec!(BigUint::from(0 as u32); next_len);
-      // next_codeword.clone_from_slice(&codeword[0..next_len]);
-      codeword = codeword.iter().enumerate().map(|(index, val)| {
-        if index >= next_len {
-          return zero.clone();
-        }
+      codeword = codeword[0..next_len].iter().enumerate().map(|(index, val)| {
         let ival = val.to_bigint().unwrap();
-        let inv_omega = self.field.inv(&self.field.mul(&offset, &self.field.exp(&omega, &BigInt::from(index))));
+        let inv_omega = self.field.inv(&self.field.mul(&offset, &self.field.exp
+(&omega, &BigInt::from(index))));
         // ( (one + alpha / (offset * (omega^i)) ) * codeword[i]
         let a = self.field.mul(&ival, &self.field.add(&Field::one(), &self.field.mul(&alpha, &inv_omega)));
         //  (one - alpha / (offset * (omega^i)) ) * codeword[len(codeword)//2 + i] ) for i in range(len(codeword)//2)]
@@ -108,7 +135,6 @@ impl Fri {
         );
         return self.field.mul(&two_inv, &self.field.add(&a, &b)).to_biguint().unwrap();
       }).collect();
-      codeword.resize(next_len, zero.clone());
 
       omega = self.field.mul(&omega, &omega);
       offset = self.field.mul(&offset, &offset);
@@ -127,8 +153,7 @@ impl Fri {
     }
 
     let mut indices: Vec<u32> = Vec::new();
-    // TODO: use a map for this
-    let mut reduced_indices: Vec<u32> = Vec::new();
+    let mut reduced_indices: HashMap<u32, bool> = HashMap::new();
     let mut counter: u32 = 0;
     while indices.len() < (count as usize) {
       let mut hasher = blake3::Hasher::new();
@@ -138,9 +163,9 @@ impl Fri {
       let index = Field::bigint_to_u32(&(v % BigInt::from(size)));
       let reduced_index = index % reduced_size;
       counter += 1;
-      if !reduced_indices.contains(&reduced_index) {
+      if !reduced_indices.contains_key(&reduced_index) {
         indices.push(index);
-        reduced_indices.push(reduced_index);
+        reduced_indices.insert(reduced_index, true);
       }
     }
     indices
@@ -253,21 +278,19 @@ mod tests {
     let domain_size: u32 = 8192;
     let domain_g = f.generator(&BigInt::from(domain_size));
 
-    let fri = Fri {
+    let fri = Fri::new(&FriOptions {
       offset: g.clone(),
       omega: domain_g.clone(),
       domain_len: domain_size,
-      field: Rc::clone(&f),
       expansion_factor: 2,
       colinearity_test_count: 10
-    };
+    }, &f);
 
     let mut poly = Polynomial::new(&f);
     poly.term(&BigInt::from(3), 2);
     let mut points: Vec<BigUint> = Vec::new();
-    let eval_domain = fri.eval_domain();
-    for i in eval_domain {
-      points.push(poly.eval(&BigInt::from(i)).to_biguint().unwrap());
+    for i in fri.domain() {
+      points.push(poly.eval(&i).to_biguint().unwrap());
     }
     fri.prove(&points, & mut channel);
     fri.verify(& mut channel);
