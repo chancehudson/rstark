@@ -18,6 +18,9 @@ impl Field {
   pub fn bigint_to_u32(v: &BigInt) -> u32 {
     let (_, digits) = v.to_u32_digits();
     if digits.len() != 1 {
+      if digits.len() == 0 {
+        return 0;
+      }
       panic!("invalid bigint digits len for u32 conversion");
     }
     digits[0]
@@ -52,12 +55,10 @@ impl Field {
   }
 
   pub fn modd(&self, v: &BigInt) -> BigInt {
-    if v < &Field::zero() {
+    if v.sign() == Sign::Minus {
       return (v + &self.p * (1 + (v * -1) / &self.p)) % &self.p;
-    } else if v >= &self.p {
-      return v % &self.p;
     }
-    v.clone()
+    v % &self.p
   }
 
   pub fn add(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
