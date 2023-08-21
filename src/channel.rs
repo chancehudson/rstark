@@ -1,5 +1,7 @@
 use num_bigint::BigUint;
+use serde::{Serialize, Deserialize};
 
+#[derive(Serialize, Deserialize)]
 pub struct Message {
   pub data: Vec<BigUint>
 }
@@ -53,6 +55,17 @@ impl Channel {
       }
     }
     BigUint::from_bytes_le(hasher.finalize().as_bytes())
+  }
+
+  pub fn serialize(&self) -> String {
+    serde_json::to_string(&self.messages).unwrap()
+  }
+
+  pub fn deserialize(data: &String) -> Channel {
+    Channel {
+      messages: serde_json::from_str(data).unwrap(),
+      read_index: 0
+    }
   }
 }
 

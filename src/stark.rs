@@ -162,7 +162,7 @@ impl Stark {
     out
   }
 
-  pub fn prove(&self, trace: &Vec<Vec<BigInt>>, transition_constraints: &Vec<MPolynomial>, boundary: &Vec<(u32, u32, BigInt)>) -> Channel {
+  pub fn prove(&self, trace: &Vec<Vec<BigInt>>, transition_constraints: &Vec<MPolynomial>, boundary: &Vec<(u32, u32, BigInt)>) -> String {
     let mut trace = trace.clone();
     let mut channel = Channel::new();
 
@@ -316,10 +316,11 @@ impl Stark {
       channel.push(&path);
     }
 
-    channel
+    channel.serialize()
   }
 
-  pub fn verify(&self, channel: & mut Channel, transition_constraints: &Vec<MPolynomial>, boundary: &Vec<(u32, u32, BigInt)>) -> bool {
+  pub fn verify(&self, proof: &String, transition_constraints: &Vec<MPolynomial>, boundary: &Vec<(u32, u32, BigInt)>) -> bool {
+    let mut channel = Channel::deserialize(proof);
     let mut original_trace_len = 0;
     for (c, _, _) in boundary {
       if c > &original_trace_len {
@@ -340,7 +341,7 @@ impl Stark {
     let count = u32::try_from(1 + 2 * transition_constraints.len() + 2 * usize::try_from(self.register_count).unwrap()).unwrap();
     let weights = self.sample_weights(count, &channel.verifier_hash().to_bigint().unwrap());
 
-    let mut polynomial_vals = self.fri.verify(channel);
+    let mut polynomial_vals = self.fri.verify(& mut channel);
     polynomial_vals.sort_by(|(ax, _ay), (bx, _by)| {
       if ax > bx {
         return Ordering::Greater;
@@ -495,7 +496,7 @@ mod tests {
     c.sub(next_state);
     transition_constraints.push(c);
 
-    let mut channel = stark.prove(&trace, &transition_constraints, &boundary_constraints);
-    stark.verify(& mut channel, &transition_constraints, &boundary_constraints);
+    let proof = stark.prove(&trace, &transition_constraints, &boundary_constraints);
+    stark.verify(&proof, &transition_constraints, &boundary_constraints);
   }
 }

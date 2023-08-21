@@ -1,10 +1,11 @@
 use std::collections::HashMap;
-use num_bigint::{BigInt};
+use num_bigint::{BigInt, BigUint, ToBigInt};
 use crate::field::Field;
 use std::rc::Rc;
 use crate::polynomial::Polynomial;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct MPolynomial {
   field: Rc<Field>,
   exp_map: HashMap<Vec<u32>, BigInt>
@@ -15,6 +16,17 @@ impl MPolynomial {
     MPolynomial {
       field: Rc::clone(field),
       exp_map: HashMap::new()
+    }
+  }
+
+  pub fn from_map(map: &HashMap<Vec<u32>, BigUint>, field: &Rc<Field>) -> MPolynomial {
+    let mut m: HashMap<Vec<u32>, BigInt> = HashMap::new();
+    for (k, v) in map {
+      m.insert(k.clone(), v.clone().to_bigint().unwrap());
+    }
+    MPolynomial {
+      field: Rc::clone(field),
+      exp_map: m
     }
   }
 

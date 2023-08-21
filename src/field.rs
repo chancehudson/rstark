@@ -1,7 +1,8 @@
 use num_bigint::{BigInt, Sign};
 use rand::Rng;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Field {
   p: BigInt,
   g: BigInt

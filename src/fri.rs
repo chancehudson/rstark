@@ -36,7 +36,7 @@ impl Fri {
   }
 
   pub fn prove(&self, codeword: &Vec<BigUint>, channel: & mut Channel) -> Vec<u32> {
-    if self.domain_len != codeword.len().try_into().unwrap() {
+    if self.domain_len != u32::try_from(codeword.len()).unwrap() {
       panic!("initial codeword does not match domain len");
     }
     let codewords = self.commit(codeword, channel);
@@ -154,7 +154,7 @@ impl Fri {
     let mut roots: Vec<BigUint> = Vec::new();
     let mut alphas: Vec<BigUint> = Vec::new();
 
-    for _ in 0..self.round_count() {
+    for i in 0..self.round_count() {
       roots.push(channel.pull().data[0].clone());
       alphas.push(self.field.sample(&channel.verifier_hash().to_bigint().unwrap()).to_biguint().unwrap());
     }

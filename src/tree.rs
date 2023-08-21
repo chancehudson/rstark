@@ -11,12 +11,11 @@ impl Tree {
   }
 
   pub fn build(leaves: &Vec<BigUint>) -> Vec<Vec<BigUint>> {
-
     let mut levels: Vec<Vec<BigUint>> = Vec::new();
     levels.push(leaves.clone());
 
     // zzzz
-    let level_count = (leaves.len() as f32).log2().ceil() as usize;
+    let level_count = (levels[0].len() as f32).log2().ceil() as usize;
 
     for i in 0..level_count {
       let mut level: Vec<BigUint> = Vec::new();
