@@ -1,7 +1,6 @@
 use num_bigint::BigInt;
 use crate::field::Field;
 use std::rc::Rc;
-use crate::group_cache::GroupCache;
 
 #[derive(Clone)]
 pub struct Polynomial {
