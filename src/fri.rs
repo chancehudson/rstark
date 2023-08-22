@@ -101,6 +101,12 @@ impl Fri {
     let two_inv = self.field.inv(&BigInt::from(2));
     let zero = BigUint::from(0 as u32);
 
+    let domain = self.field.domain(&omega, self.domain_len);
+    // only build the part we need
+    let offset_domain = self.field.domain(&offset, 2_u32.pow(self.round_count()));
+
+    let mut exp: usize = 1;
+
     for x in 0..self.round_count() {
       let root = Tree::commit(&codeword);
       channel.push_single(&root);
@@ -115,10 +121,9 @@ impl Fri {
       let next_len = codeword.len() >> 1;
       codeword = codeword[0..next_len].iter().enumerate().map(|(index, val)| {
         let ival = val.to_bigint().unwrap();
-        let inv_omega = self.field.inv(&self.field.mul(&offset, &self.field.exp
-(&omega, &BigInt::from(index))));
+        let inv_omega = self.field.inv(&self.field.lmul(&offset_domain[exp], &domain[exp * index]));
         // ( (one + alpha / (offset * (omega^i)) ) * codeword[i]
-        let a = self.field.mul(&ival, &self.field.ladd(&Field::one(), &self.field.mul(&alpha, &inv_omega)));
+        let a = self.field.mul(&ival, &self.field.ladd(&Field::one(), &self.field.lmul(&alpha, &inv_omega)));
         //  (one - alpha / (offset * (omega^i)) ) * codeword[len(codeword)//2 + i] ) for i in range(len(codeword)//2)]
         let b = self.field.mul(
           &self.field.lsub(&Field::one(), &self.field.lmul(&alpha, &inv_omega)),
@@ -127,8 +132,7 @@ impl Fri {
         return self.field.mul(&two_inv, &self.field.ladd(&a, &b)).to_biguint().unwrap();
       }).collect();
 
-      omega = self.field.mul(&omega, &omega);
-      offset = self.field.mul(&offset, &offset);
+      exp *= 2;
     }
     channel.push(&codeword);
     codewords.push(codeword);
