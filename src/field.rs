@@ -1,4 +1,5 @@
 use num_bigint::{BigInt, Sign};
+use num_integer::Integer;
 use rand::Rng;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -113,24 +114,11 @@ impl Field {
 
   pub fn inv(&self, v: &BigInt) -> BigInt {
     let mut val = self.modd(&v.clone());
-    if val == Field::zero() {
-      panic!("divide by zero");
+    let e_gcd = v.clone().extended_gcd(&self.p);
+    if e_gcd.gcd != BigInt::from(1) {
+      panic!("modinv does not exist");
     }
-    let one = Field::one();
-    let mut y = Field::zero();
-    let mut x = Field::one();
-    let mut f = self.p.clone();
-
-    while val > one {
-      let q = val.clone() / f.clone();
-      let mut t = f.clone();
-      f = val % f;
-      val = t;
-      t = y.clone();
-      y = x - q * y;
-      x = t;
-    }
-    self.modd(&x)
+    self.add(&e_gcd.x, &self.p)
   }
 
   pub fn random(&self) -> BigInt {

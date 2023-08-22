@@ -240,6 +240,7 @@ dependencies = [
  "blake3",
  "getrandom",
  "num-bigint",
+ "num-integer",
  "rand",
  "serde",
  "serde-wasm-bindgen",
