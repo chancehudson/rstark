@@ -188,32 +188,34 @@ impl Polynomial {
 
   // https://en.wikipedia.org/wiki/Polynomial_evaluation#Multipoint_evaluation
   pub fn eval_batch_fast(&self, vals: &Vec<BigInt>) -> Vec<BigInt> {
+    self.eval_batch_fast_slice(&vals[0..])
+  }
+
+  pub fn eval_batch_fast_slice(&self, vals: &[BigInt]) -> Vec<BigInt> {
     if vals.len() < 8 {
-      return self.eval_batch(vals);
+      return self.eval_batch(&vals.to_vec());
     }
-    self.eval_batch_fast_(vals, vals.len(), 0)
+    self.eval_batch_fast_(&vals[0..])
   }
 
   fn eval_batch_fast_(&self,
-    vals: &Vec<BigInt>,
-    len: usize,
-    offset: usize
+    vals: &[BigInt],
   ) -> Vec<BigInt> {
-    if offset >= vals.len() {
+    if vals.len() == 0{
       return Vec::new();
     }
-    let half = len >> 1;
-    if len == 1 || (offset + half) >= vals.len() {
-      return vec!(self.eval(&vals[offset]));
+    if vals.len() == 1 {
+      return vec!(self.eval(&vals[0]));
     }
+    let half = vals.len() >> 1;
 
-    let left_zeroifier = Polynomial::zeroifier_fft_slice(&vals[offset..(offset+half)], &self.field);
-    let right_zeroifier = Polynomial::zeroifier_fft_slice(&vals[(offset+half)..(offset+len)], &self.field);
+    let left_zeroifier = Polynomial::zeroifier_fft_slice(&vals[0..half], &self.field);
+    let right_zeroifier = Polynomial::zeroifier_fft_slice(&vals[half..], &self.field);
     let (_, left_r) = self.div(&left_zeroifier);
     let (_, right_r) = self.div(&right_zeroifier);
 
-    let mut left = left_r.eval_batch_fast_(vals, half, offset);
-    let right = right_r.eval_batch_fast_(vals, half, offset+half);
+    let mut left = left_r.eval_batch_fast_(&vals[0..half]);
+    let right = right_r.eval_batch_fast_(&vals[half..]);
     left.extend(right);
     left
   }
@@ -373,6 +375,80 @@ impl Polynomial {
       out.add(polynomials[i].mul_scalar(&y_vals[i]));
     }
     out
+  }
+
+  pub fn interpolate_fft(x_vals: &Vec<BigInt>, y_vals: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
+    Self::interpolate_fft_slice(&x_vals[0..], &y_vals[0..], field)
+  }
+
+  pub fn interpolate_fft_slice(x_vals: &[BigInt], y_vals: &[BigInt], field: &Rc<Field>) -> Polynomial {
+    if x_vals.len() != y_vals.len() {
+      panic!("x/y len mismatch");
+    }
+    if x_vals.len() == 0 {
+      return Polynomial::new(field);
+    }
+    if x_vals.len() == 1 {
+      let mut p = Polynomial::new(field);
+      p.term(&y_vals[0], 0);
+      return p;
+    }
+    let half = x_vals.len() >> 1;
+
+    let left_zeroifier = Self::zeroifier_fft_slice(&x_vals[0..half], field);
+    let right_zeroifier = Self::zeroifier_fft_slice(&x_vals[half..], field);
+
+    let left_offset = right_zeroifier.eval_batch_fast_slice(&x_vals[0..half]);
+    let right_offset = left_zeroifier.eval_batch_fast_slice(&x_vals[half..]);
+
+    let left_targets = y_vals[0..half].iter().enumerate().map(|(i, v)| field.div(v, &left_offset[i])).collect::<Vec<BigInt>>();
+    let right_targets = y_vals[half..].iter().enumerate().map(|(i, v)| field.div(v, &right_offset[i])).collect::<Vec<BigInt>>();
+
+    let mut left_interpolant = Self::interpolate_fft_slice(&x_vals[0..half], &left_targets[0..], field);
+    let mut right_interpolant = Self::interpolate_fft_slice(&x_vals[half..], &right_targets[0..], field);
+
+    left_interpolant.mul(&right_zeroifier);
+    right_interpolant.mul(&left_zeroifier);
+    left_interpolant.add(&right_interpolant);
+    left_interpolant
+  }
+
+  pub fn interpolate_fft_batch(x_vals: &[BigInt], y_vals: &[Vec<BigInt>], field: &Rc<Field>) -> Vec<Polynomial> {
+    if x_vals.len() == 0 {
+      return vec!(Polynomial::new(field));
+    }
+    if x_vals.len() == 1 {
+      return y_vals.iter().map(|vals| {
+        let mut p = Polynomial::new(field);
+        p.term(&vals[0], 0);
+        p
+      }).collect();
+    }
+    let half = x_vals.len() >> 1;
+
+    let left_zeroifier = Self::zeroifier_fft_slice(&x_vals[0..half], field);
+    let right_zeroifier = Self::zeroifier_fft_slice(&x_vals[half..], field);
+
+    let left_offset = right_zeroifier.eval_batch_fast_slice(&x_vals[0..half]);
+    let right_offset = left_zeroifier.eval_batch_fast_slice(&x_vals[half..]);
+
+    let left_targets: Vec<Vec<BigInt>> = y_vals.iter().map(|vals| {
+      vals[0..half].iter().enumerate().map(|(i, v)| field.div(v, &left_offset[i])).collect::<Vec<BigInt>>()
+    }).collect();
+    let right_targets: Vec<Vec<BigInt>> = y_vals.iter().map(|vals| {
+      vals[half..].iter().enumerate().map(|(i, v)| field.div(v, &right_offset[i])).collect::<Vec<BigInt>>()
+    }).collect();
+
+    let left_interpolant = Self::interpolate_fft_batch(&x_vals[0..half], &left_targets[0..], field);
+    let mut right_interpolant = Self::interpolate_fft_batch(&x_vals[half..], &right_targets[0..], field);
+
+    left_interpolant.iter().enumerate().map(|(i, poly)| {
+      let mut left = poly.clone();
+      left.mul(&right_zeroifier);
+      right_interpolant[i].mul(&left_zeroifier);
+      left.add(&right_interpolant[i]);
+      left
+    }).collect()
   }
 
   pub fn test_colinearity(x_vals: &Vec<BigInt>, y_vals: &Vec<BigInt>, field: &Rc<Field>) -> bool {
@@ -809,14 +885,6 @@ mod tests {
     for v in domain {
       assert_eq!(BigInt::from(0), zeroifier_fft.eval(&v));
       assert_eq!(BigInt::from(0), zeroifier.eval(&v));
-    }
-
-    for i in zeroifier.coefs() {
-      println!("{}", i);
-    }
-    println!("-------");
-    for i in zeroifier_fft.coefs() {
-      println!("{}", i);
     }
 
     assert!(zeroifier.is_equal(&zeroifier_fft));

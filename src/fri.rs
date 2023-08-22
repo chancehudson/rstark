@@ -193,7 +193,7 @@ impl Fri {
       return self.field.mul(&last_offset, &self.field.exp(&last_omega, &BigInt::from(index)));
     }).collect();
 
-    let poly = Polynomial::lagrange(&last_domain, &last_codeword.iter().map(|v| v.to_bigint().unwrap()).collect(), &self.field);
+    let poly = Polynomial::interpolate_fft(&last_domain, &last_codeword.iter().map(|v| v.to_bigint().unwrap()).collect(), &self.field);
     for i in 0..last_domain.len() {
       if poly.eval(&last_domain[i]) != last_codeword[i].clone().to_bigint().unwrap() {
         panic!("interpolated polynomial is incorrect");

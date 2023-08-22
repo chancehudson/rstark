@@ -135,7 +135,8 @@ impl Stark {
         domain.push(self.field.exp(&self.omicron, &BigInt::from(c.clone())));
         values.push(v.clone());
       }
-      interpolants.push(Polynomial::lagrange(&domain, &values, &self.field));
+      // interpolants.push(Polynomial::lagrange(&domain, &values, &self.field));
+      interpolants.push(Polynomial::interpolate_fft(&domain, &values, &self.field));
     }
     interpolants
   }
@@ -172,14 +173,15 @@ impl Stark {
     let mut trace_domain: Vec<BigInt> = vec!(BigInt::from(0); trace.len());
     trace_domain.clone_from_slice(&self.omicron_domain[0..trace.len()]);
 
-    let mut trace_polys: Vec<Polynomial> = Vec::new();
+    let mut y_vals: Vec<Vec<BigInt>> = Vec::new();
     for i in 0..self.register_count {
       let trace_vals: Vec<BigInt> = trace
         .iter()
         .map(|registers| registers[usize::try_from(i).unwrap()].clone())
         .collect();
-      trace_polys.push(Polynomial::lagrange(&trace_domain, &trace_vals, &self.field));
+      y_vals.push(trace_vals);
     }
+    let trace_polys = Polynomial::interpolate_fft_batch(&trace_domain, &y_vals[0..], &self.field);
 
     let boundary_interpolants = self.boundary_interpolants(&boundary);
     let boundary_zeroifiers = self.boundary_zeroifiers(&boundary);
