@@ -195,14 +195,16 @@ impl Stark {
     }
 
     let mut boundary_quotient_codewords: Vec<Vec<BigUint>> = Vec::new();
+    let mut boundary_quotient_trees: Vec<Tree> = Vec::new();
     for i in 0..usize::try_from(self.register_count).unwrap() {
       let codewords: Vec<BigUint> = boundary_quotients[i].eval_batch_coset(&self.fri.offset, self.fri_domain_len)
         .iter()
         .map(|v| v.to_biguint().unwrap())
         .collect();
-      let merkle_root = Tree::commit(&codewords);
-      channel.push_single(&merkle_root);
+      let tree = Tree::build(&codewords);
+      channel.push_single(&tree.root());
       boundary_quotient_codewords.push(codewords);
+      boundary_quotient_trees.push(tree);
     }
 
     let mut p_x = Polynomial::new(&self.field);
@@ -232,7 +234,8 @@ impl Stark {
       .iter()
       .map(|v| v.to_biguint().unwrap())
       .collect();
-    let randomizer_root = Tree::commit(&randomizer_codeword);
+    let randomizer_tree = Tree::build(&randomizer_codeword);
+    let randomizer_root = randomizer_tree.root();
     channel.push_single(&randomizer_root);
 
     let count = u32::try_from(1 + 2 * transition_quotients.len() + 2 * boundary_quotients.len()).unwrap();
@@ -297,17 +300,17 @@ impl Stark {
       return Ordering::Less;
     });
 
-    for bqc in boundary_quotient_codewords {
+    for (i, bqc) in boundary_quotient_codewords.iter().enumerate() {
       for index in quadrupled_indices.clone() {
         channel.push_single(&bqc[usize::try_from(index).unwrap()]);
-        let (path, _) = Tree::open(index, &bqc);
+        let (path, _) = boundary_quotient_trees[i].open(index);
         channel.push(&path);
       }
     }
 
     for index in quadrupled_indices {
       channel.push_single(&randomizer_codeword[usize::try_from(index).unwrap()]);
-      let (path, _) = Tree::open(index, &randomizer_codeword);
+      let (path, _) = randomizer_tree.open(index);
       channel.push(&path);
     }
 
@@ -462,8 +465,8 @@ mod tests {
       &f,
       2,
       sequence_len,
-      8,
-      44,
+      32,
+      26,
       2
     );
 

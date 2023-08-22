@@ -17,8 +17,8 @@ fn main() {
     &f,
     2,
     sequence_len,
-    8,
-    44,
+    4,
+    64,
     2
   );
 

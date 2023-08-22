@@ -84,10 +84,12 @@ impl Fri {
         next_codeword[usize::try_from(indices_c[i]).unwrap()].clone()
       ));
     }
+    let current_tree = Tree::build(&current_codeword);
+    let next_tree = Tree::build(&next_codeword);
     for i in 0..usize::try_from(self.colinearity_test_count).unwrap() {
-      channel.push(&Tree::open(indices_a[i], &current_codeword).0);
-      channel.push(&Tree::open(indices_b[i], &current_codeword).0);
-      channel.push(&Tree::open(indices_c[i], &next_codeword).0);
+      channel.push(&current_tree.open(indices_a[i]).0);
+      channel.push(&current_tree.open(indices_b[i]).0);
+      channel.push(&next_tree.open(indices_c[i]).0);
     }
   }
 

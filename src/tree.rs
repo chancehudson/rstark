@@ -1,6 +1,8 @@
 use num_bigint::BigUint;
 
-pub struct Tree {}
+pub struct Tree {
+  pub levels: Vec<Vec<BigUint>>
+}
 
 impl Tree {
   pub fn hash(leaf1: &BigUint, leaf2: &BigUint) -> BigUint {
@@ -10,7 +12,15 @@ impl Tree {
     BigUint::from_bytes_le(hasher.finalize().as_bytes())
   }
 
-  pub fn build(leaves: &Vec<BigUint>) -> Vec<Vec<BigUint>> {
+  pub fn root(&self) -> BigUint {
+    self.levels[self.levels.len() - 1][0].clone()
+  }
+
+  pub fn leaves(&self) -> &Vec<BigUint> {
+    &self.levels[0]
+  }
+
+  pub fn build(leaves: &Vec<BigUint>) -> Tree {
     let mut levels: Vec<Vec<BigUint>> = Vec::new();
     levels.push(leaves.clone());
 
@@ -27,33 +37,31 @@ impl Tree {
       }
       levels.push(level);
     }
-    levels
+    Tree {
+      levels
+    }
   }
 
   pub fn commit(leaves: &Vec<BigUint>) -> BigUint {
-    let levels = Self::build(leaves);
-    if levels.len() < 1 {
-      panic!("invalid tree height");
-    }
-    levels[levels.len() - 1][0].clone()
+    let tree = Self::build(leaves);
+    tree.root()
   }
 
-  pub fn open(index: u32, leaves: &Vec<BigUint>) -> (Vec<BigUint>, BigUint) {
-    let tree = Self::build(leaves);
+  pub fn open(&self, index: u32) -> (Vec<BigUint>, BigUint) {
     let mut index = index;
-    if index > leaves.len().try_into().unwrap() {
+    if index > self.leaves().len().try_into().unwrap() {
       panic!("index is greater than leaves length");
     }
     let mut path: Vec<BigUint> = Vec::new();
-    for i in 0..(tree.len() - 1) {
+    for i in 0..(self.levels.len() - 1) {
       let sibling_index;
       if index % 2 == 0 {
         sibling_index = index + 1;
       } else {
         sibling_index = index - 1;
       }
-      let sibling = tree[i][usize::try_from(sibling_index).unwrap()].clone();
-      let node = tree[i][usize::try_from(index).unwrap()].clone();
+      let sibling = self.levels[i][usize::try_from(sibling_index).unwrap()].clone();
+      let node = self.levels[i][usize::try_from(index).unwrap()].clone();
       if index % 2 == 0 {
         path.push(node);
         path.push(sibling);
@@ -63,7 +71,7 @@ impl Tree {
       }
       index >>= 1;
     }
-    (path, tree[tree.len() - 1][0].clone())
+    (path, self.root())
   }
 
   pub fn verify(root: &BigUint, _index: u32, path: &Vec<BigUint>, leaf: &BigUint) -> bool {
@@ -94,16 +102,16 @@ mod tests {
     for i in 0..100 {
       leaves.push(BigUint::from(i as u32));
     }
-    let levels = Tree::build(&leaves);
+    let tree = Tree::build(&leaves);
     // expected levels.len() = log2(leaves.len()) + 1
     let expected_len = 7 + 1;
-    assert_eq!(levels.len(), expected_len);
+    assert_eq!(tree.levels.len(), expected_len);
     // intermediate levels should have even number of leaves
     for i in 0..(expected_len-1) {
-      assert_eq!(levels[i].len() % 2, 0);
+      assert_eq!(tree.levels[i].len() % 2, 0);
     }
     // top level should be root
-    assert_eq!(levels[expected_len-1].len(), 1);
+    assert_eq!(tree.levels[expected_len-1].len(), 1);
   }
 
   #[test]
@@ -128,7 +136,8 @@ mod tests {
       leaves.push(BigUint::from(i as u32));
     }
     let index = 5;
-    let (path, root) = Tree::open(index, &leaves);
+    let tree = Tree::build(&leaves);
+    let (path, root) = tree.open(index);
     Tree::verify(&root, index, &path, &leaves[index as usize]);
   }
 
@@ -140,7 +149,8 @@ mod tests {
       leaves.push(BigUint::from(i as u32));
     }
     let index = 5;
-    let (mut path, root) = Tree::open(index, &leaves);
+    let tree = Tree::build(&leaves);
+    let (mut path, root) = tree.open(index);
     // change some path element
     path[4] = BigUint::from(1290 as u32);
     Tree::verify(&root, index, &path, &leaves[index as usize]);
@@ -153,8 +163,9 @@ mod tests {
     for i in 0..100 {
       leaves.push(BigUint::from(i as u32));
     }
+    let tree = Tree::build(&leaves);
     let index = 5;
-    let (path, mut root) = Tree::open(index, &leaves);
+    let (path, mut root) = tree.open(index);
     root += BigUint::from(1 as u32);
     Tree::verify(&root, index, &path, &leaves[index as usize]);
   }
