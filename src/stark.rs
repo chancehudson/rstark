@@ -42,11 +42,6 @@ impl Stark {
     let fri_domain_len = omicron_domain_len * expansion_factor;
     let omega = field.generator(&BigInt::from(fri_domain_len));
     let omicron = field.generator(&BigInt::from(omicron_domain_len));
-    // TODO: build the full omicron domain lazily?
-    let mut omicron_domain = Vec::new();
-    for i in 0..omicron_domain_len {
-      omicron_domain.push(field.exp(&omicron, &BigInt::from(i)));
-    }
 
     let fri = Fri::new(&FriOptions {
       offset: offset.clone(),
@@ -65,9 +60,9 @@ impl Stark {
       randomized_trace_len: original_trace_len + randomizer_count,
       expansion_factor,
       omicron_domain_len,
-      omicron,
+      omicron: omicron.clone(),
       omega,
-      omicron_domain,
+      omicron_domain: field.domain(&omicron, omicron_domain_len),
       fri,
       fri_domain_len
     }
@@ -112,7 +107,7 @@ impl Stark {
 
   fn transition_zeroifier(&self) -> Polynomial {
     let points = &self.omicron_domain[0..usize::try_from(self.original_trace_len-1).unwrap()];
-    Polynomial::zeroifier_slice(points, &self.field)
+    Polynomial::zeroifier_fft_slice(points, &self.field)
   }
 
   fn boundary_zeroifiers(&self, boundary: &Vec<(u32, u32, BigInt)>) -> Vec<Polynomial> {
@@ -123,7 +118,7 @@ impl Stark {
         .filter(|(_c, r, _v)| r == &i)
         .map(|(c, _r, _v)| self.field.exp(&self.omicron, &BigInt::from(c.clone())))
         .collect();
-      zeroifiers.push(Polynomial::zeroifier(&points, &self.field));
+      zeroifiers.push(Polynomial::zeroifier_fft(&points, &self.field));
     }
     zeroifiers
   }
@@ -199,7 +194,7 @@ impl Stark {
 
     let mut boundary_quotient_codewords: Vec<Vec<BigUint>> = Vec::new();
     for i in 0..usize::try_from(self.register_count).unwrap() {
-      let codewords: Vec<BigUint> = boundary_quotients[i].eval_batch(self.fri.domain())
+      let codewords: Vec<BigUint> = boundary_quotients[i].eval_batch_coset(&self.fri.offset, self.fri_domain_len)
         .iter()
         .map(|v| v.to_biguint().unwrap())
         .collect();
@@ -231,7 +226,7 @@ impl Stark {
       randomizer_poly.term(&self.field.random(), i);
     }
 
-    let randomizer_codeword = randomizer_poly.eval_batch(self.fri.domain())
+    let randomizer_codeword = randomizer_poly.eval_batch_coset(&self.fri.offset, self.fri_domain_len)
       .iter()
       .map(|v| v.to_biguint().unwrap())
       .collect();
@@ -278,7 +273,7 @@ impl Stark {
       combination.add(&w_poly);
     }
 
-    let combined_codeword = combination.eval_batch(self.fri.domain())
+    let combined_codeword = combination.eval_batch_coset(&self.fri.offset, self.fri_domain_len)
       .iter()
       .map(|v| v.to_biguint().unwrap())
       .collect();
@@ -465,8 +460,8 @@ mod tests {
       &f,
       2,
       sequence_len,
-      4,
       8,
+      44,
       2
     );
 

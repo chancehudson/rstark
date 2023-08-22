@@ -1,6 +1,7 @@
 use num_bigint::BigInt;
 use crate::field::Field;
 use std::rc::Rc;
+use crate::group_cache::GroupCache;
 
 #[derive(Clone)]
 pub struct Polynomial {
@@ -188,6 +189,9 @@ impl Polynomial {
 
   // https://en.wikipedia.org/wiki/Polynomial_evaluation#Multipoint_evaluation
   pub fn eval_batch_fast(&self, vals: &Vec<BigInt>) -> Vec<BigInt> {
+    if vals.len() < 8 {
+      return self.eval_batch(vals);
+    }
     self.eval_batch_fast_(vals, vals.len(), 0)
   }
 
@@ -195,7 +199,7 @@ impl Polynomial {
     vals: &Vec<BigInt>,
     len: usize,
     offset: usize
-    ) -> Vec<BigInt> {
+  ) -> Vec<BigInt> {
     if offset >= vals.len() {
       return Vec::new();
     }
@@ -204,8 +208,8 @@ impl Polynomial {
       return vec!(self.eval(&vals[offset]));
     }
 
-    let left_zeroifier = Polynomial::zeroifier_slice(&vals[offset..(offset+half)], &self.field);
-    let right_zeroifier = Polynomial::zeroifier_slice(&vals[(offset+half)..(offset+len)], &self.field);
+    let left_zeroifier = Polynomial::zeroifier_fft_slice(&vals[offset..(offset+half)], &self.field);
+    let right_zeroifier = Polynomial::zeroifier_fft_slice(&vals[(offset+half)..(offset+len)], &self.field);
     let (_, left_r) = self.div(&left_zeroifier);
     let (_, right_r) = self.div(&right_zeroifier);
 
@@ -213,6 +217,14 @@ impl Polynomial {
     let right = right_r.eval_batch_fast_(vals, half, offset+half);
     left.extend(right);
     left
+  }
+
+  pub fn eval_batch_coset(&self, offset: &BigInt, size: u32) -> Vec<BigInt> {
+    let mut scaled = self.clone();
+    scaled.scale(offset);
+    let generator = self.field.generator(&BigInt::from(size));
+    let domain = self.field.domain(&generator, size);
+    Self::eval_fft(&scaled.coefs(), &domain, &self.field, 1, 0)
   }
 
   // Evaluate a polynomial over a multiplicative subgroup
@@ -240,6 +252,48 @@ impl Polynomial {
       out[i+left_out.len()] = field.sub(x, &y_root);
     }
     out
+  }
+
+  pub fn eval_fft_inv(coefs: &Vec<BigInt>, field: &Rc<Field>) -> Vec<BigInt> {
+    if coefs.len() == 1 {
+      return vec!(coefs[0].clone());
+    }
+    let len_inv = field.inv(&BigInt::from(u32::try_from(coefs.len()).unwrap()));
+    let domain_size = u32::try_from(coefs.len()).unwrap();
+    let generator = field.generator(&BigInt::from(domain_size));
+    let g_inv = field.inv(&generator);
+    let domain = field.domain(&g_inv, domain_size);
+
+    let out = Self::eval_fft(coefs, &domain, field, 1, 0);
+    out.iter().map(|v| field.mul(&v, &len_inv)).collect()
+  }
+
+  pub fn mul_fft(poly1: &Polynomial, poly2: &Polynomial, field: &Rc<Field>) -> Polynomial {
+    if poly1.degree() + poly2.degree() < 4 {
+      let mut o = poly1.clone();
+      o.mul(&poly2);
+      return o;
+    }
+    let out_degree = 2*std::cmp::max(poly1.degree(), poly2.degree());
+    let domain_size = 2_u32.pow(u32::try_from(out_degree).unwrap().ilog2() + 1);
+    let generator = field.generator(&BigInt::from(domain_size));
+    let domain = field.domain(&generator, domain_size);
+
+    let x1 = Self::eval_fft(poly1.coefs(), &domain, field, 1, 0);
+    let x2 = Self::eval_fft(poly2.coefs(), &domain, field, 1, 0);
+
+    let mut x3: Vec<BigInt> = Vec::new();
+    for i in 0..domain.len() {
+      x3.push(field.mul(&x1[i], &x2[i]));
+    }
+
+    let out = Self::eval_fft_inv(&x3, field);
+    let mut p = Polynomial {
+      field: Rc::clone(field),
+      coefs: out
+    };
+    p.trim();
+    p
   }
 
   // remove and return the largest non-zero coefficient
@@ -325,6 +379,26 @@ impl Polynomial {
   pub fn test_colinearity(x_vals: &Vec<BigInt>, y_vals: &Vec<BigInt>, field: &Rc<Field>) -> bool {
     let poly = Polynomial::lagrange(x_vals, y_vals, field);
     return poly.degree() <= 1;
+  }
+
+  pub fn zeroifier_fft(points: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
+    Self::zeroifier_fft_slice(&points[0..], field)
+  }
+
+  pub fn zeroifier_fft_slice(points: &[BigInt], field: &Rc<Field>) -> Polynomial {
+    if points.len() == 0 {
+      return Polynomial::new(field);
+    }
+    if points.len() == 1 {
+      let mut p = Polynomial::new(field);
+      p.term(&field.neg(&points[0]), 0);
+      p.term(&BigInt::from(1), 1);
+      return p;
+    }
+    let half = points.len() >> 1;
+    let left = Self::zeroifier_fft_slice(&points[0..(half)], field);
+    let right = Self::zeroifier_fft_slice(&points[(half)..], field);
+    return Self::mul_fft(&left, &right, field);
   }
 
   pub fn zeroifier(points: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
@@ -673,6 +747,26 @@ mod tests {
   }
 
   #[test]
+  fn should_multiply_polynomials_fft() {
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let mut poly1 = Polynomial::new(&f);
+    let mut poly2 = Polynomial::new(&f);
+    for i in 0..2 {
+      poly1.term(&f.random(), i);
+      poly2.term(&f.random(), i);
+    }
+
+    let mut expected = poly1.clone();
+    expected.mul(&poly2);
+
+    let out = Polynomial::mul_fft(&poly1, &poly2, &f);
+    assert!(out.is_equal(&expected));
+  }
+
+  #[test]
   fn should_build_zeroifier_polynomial() {
     let p = BigInt::from(3221225473_u32);
     let g = BigInt::from(5);
@@ -690,5 +784,42 @@ mod tests {
     for i in 0..s {
       assert_eq!(poly.eval(&domain[i]), BigInt::from(0));
     }
+
+    let mut is_zero = true;
+    for i in poly.coefs() {
+      if i != &BigInt::from(0) {
+        is_zero = false;
+      }
+    }
+    assert!(!is_zero);
+  }
+
+  #[test]
+  fn should_build_zeroifier_polynomial_domain() {
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
+    let f = Rc::new(Field::new(p, g));
+
+    let size = 128_u32;
+    let generator = f.generator(&BigInt::from(size));
+    let domain = f.domain(&generator, size);
+    let zeroifier = Polynomial::zeroifier(&domain, &f);
+    let mut zeroifier_fft = Polynomial::zeroifier_fft(&domain, &f);
+    zeroifier_fft.trim();
+
+    for v in domain {
+      assert_eq!(BigInt::from(0), zeroifier_fft.eval(&v));
+      assert_eq!(BigInt::from(0), zeroifier.eval(&v));
+    }
+
+    for i in zeroifier.coefs() {
+      println!("{}", i);
+    }
+    println!("-------");
+    for i in zeroifier_fft.coefs() {
+      println!("{}", i);
+    }
+
+    assert!(zeroifier.is_equal(&zeroifier_fft));
   }
 }

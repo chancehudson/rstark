@@ -5,6 +5,7 @@ mod tree;
 mod fri;
 mod mpolynomial;
 mod stark;
+mod group_cache;
 
 use crate::field::Field;
 use crate::stark::Stark;

@@ -28,17 +28,6 @@ pub struct Fri {
 
 impl Fri {
   pub fn new(options: &FriOptions, field: &Rc<Field>) -> Fri {
-    // build eval domain
-    let mut domain: Vec<BigInt> = Vec::new();
-    let mut exps: Vec<BigInt> = Vec::new();
-    exps.push(BigInt::from(1));
-    exps.push(options.omega.clone());
-    for i in 2..options.domain_len {
-      exps.push(field.mul(&exps[exps.len() - 1], &options.omega));
-    }
-    for i in 0..usize::try_from(options.domain_len).unwrap() {
-      domain.push(field.mul(&options.offset, &exps[i]));
-    }
     // calculate number of rounds
     let mut codeword_len = options.domain_len;
     let mut round_count = 0;
@@ -53,7 +42,7 @@ impl Fri {
       field: Rc::clone(field),
       expansion_factor: options.expansion_factor,
       colinearity_test_count: options.colinearity_test_count,
-      domain,
+      domain: field.coset(options.domain_len, &options.offset),
       round_count
     }
   }

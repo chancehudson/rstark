@@ -1,17 +1,26 @@
 use num_bigint::{BigInt, Sign};
 use rand::Rng;
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+use std::sync::RwLock;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Field {
   p: BigInt,
-  g: BigInt
+  g: BigInt,
+  // generator, size size keyed to contents
+  group_cache: RwLock<HashMap<(BigInt, u32), Vec<BigInt>>>,
+  // group size, offset keyed to contents
+  coset_cache: RwLock<HashMap<(u32, BigInt), Vec<BigInt>>>
 }
 
 impl Field {
   pub fn new(p: BigInt, g: BigInt) -> Field {
     Field {
-      p, g
+      p,
+      g,
+      group_cache: RwLock::new(HashMap::new()),
+      coset_cache: RwLock::new(HashMap::new())
     }
   }
 
@@ -131,6 +140,56 @@ impl Field {
 
   pub fn sample(&self, input: &BigInt) -> BigInt {
     self.modd(input)
+  }
+
+  pub fn coset(&self, size: u32, offset: &BigInt) -> Vec<BigInt> {
+    {
+      let cache = self.coset_cache.read().unwrap();
+      if let Some(coset) = cache.get(&(size, offset.clone())) {
+        return coset.clone();
+      }
+    }
+    let mut cache = self.coset_cache.write().unwrap();
+    // double check that it hasn't been built/inserted
+    // while we're waiting
+    if let Some(coset) = cache.get(&(size, offset.clone())) {
+      return coset.clone();
+    }
+    let generator = self.generator(&BigInt::from(size));
+    // build, insert, and return
+    let domain = self.domain(&generator, size);
+    let mut coset: Vec<BigInt> = Vec::new();
+    for v in domain {
+      coset.push(self.mul(&v, &offset));
+    }
+    let d = coset.clone();
+    cache.insert((size, offset.clone()), coset);
+    d
+  }
+
+  // retrieve the full domain, build if necessary
+  pub fn domain(&self, generator: &BigInt, size: u32) -> Vec<BigInt> {
+    {
+      let cache = self.group_cache.read().unwrap();
+      if let Some(domain) = cache.get(&(generator.clone(), size)) {
+        return domain.clone();
+      }
+    }
+    let mut cache = self.group_cache.write().unwrap();
+    // double check that it hasn't been built/inserted
+    // while we're waiting
+    if let Some(domain) = cache.get(&(generator.clone(), size)) {
+      return domain.clone();
+    }
+    // build, insert, and return
+    let mut domain: Vec<BigInt> = Vec::new();
+    domain.push(BigInt::from(1));
+    for i in 1..size {
+      domain.push(self.mul(&domain[domain.len() - 1], &generator));
+    }
+    let d = domain.clone();
+    cache.insert((generator.clone(), size), domain);
+    d
   }
 
 }
