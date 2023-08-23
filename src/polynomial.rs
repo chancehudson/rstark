@@ -265,7 +265,7 @@ impl Polynomial {
   }
 
   pub fn mul_fft(poly1: &Polynomial, poly2: &Polynomial, field: &Rc<Field>) -> Polynomial {
-    if poly1.degree() + poly2.degree() < 4 {
+    if poly1.degree() + poly2.degree() < 20 {
       let mut o = poly1.clone();
       o.mul(&poly2);
       return o;
@@ -387,6 +387,7 @@ impl Polynomial {
       t.term(&new_coef, new_exp.try_into().unwrap());
       t.mul(divisor);
       inter.sub(&t);
+      // inter.sub(&Polynomial::mul_fft(&t, &divisor, &self.field));
     }
     (q, inter)
   }
