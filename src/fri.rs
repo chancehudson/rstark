@@ -67,14 +67,23 @@ impl Fri {
       self.colinearity_test_count
     );
     let mut indices: Vec<u32> = top_indices.clone();
+    let codeword_trees: Vec<Tree> = codewords.iter().map(|word| Tree::build(word)).collect();
     for i in 0..(codewords.len() - 1) {
       indices = indices.iter().map(|index| index % u32::try_from(codewords[i].len() >> 1).unwrap()).collect();
-      self.query(&codewords[i], &codewords[i+1], &indices, channel);
+      self.query(&codewords[i], &codewords[i+1], &indices, channel, &codeword_trees[i], &codeword_trees[i+1]);
     }
     top_indices
   }
 
-  fn query(&self, current_codeword: &Vec<BigUint>, next_codeword: &Vec<BigUint>, indices_c: &Vec<u32>, channel: & mut Channel) {
+  fn query(
+    &self,
+    current_codeword: &Vec<BigUint>,
+    next_codeword: &Vec<BigUint>,
+    indices_c: &Vec<u32>,
+    channel: & mut Channel,
+    current_codeword_tree: &Tree,
+    next_codeword_tree: &Tree
+  ) {
     let indices_a: Vec<u32> = indices_c.to_vec();
     let indices_b: Vec<u32> = indices_c.iter().map(|val| val + ((current_codeword.len() >> 1) as u32)).collect();
     for i in 0..usize::try_from(self.colinearity_test_count).unwrap() {
@@ -84,12 +93,10 @@ impl Fri {
         next_codeword[usize::try_from(indices_c[i]).unwrap()].clone()
       ));
     }
-    let current_tree = Tree::build(&current_codeword);
-    let next_tree = Tree::build(&next_codeword);
     for i in 0..usize::try_from(self.colinearity_test_count).unwrap() {
-      channel.push(&current_tree.open(indices_a[i]).0);
-      channel.push(&current_tree.open(indices_b[i]).0);
-      channel.push(&next_tree.open(indices_c[i]).0);
+      channel.push(&current_codeword_tree.open(indices_a[i]).0);
+      channel.push(&current_codeword_tree.open(indices_b[i]).0);
+      channel.push(&next_codeword_tree.open(indices_c[i]).0);
     }
   }
 
