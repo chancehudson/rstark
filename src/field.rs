@@ -44,6 +44,10 @@ impl Field {
     self.modd(&BigInt::new(Sign::Plus, vec!(val)))
   }
 
+  pub fn p(&self) -> &BigInt {
+    &self.p
+  }
+
   pub fn g(&self) -> BigInt {
     self.g.clone()
   }

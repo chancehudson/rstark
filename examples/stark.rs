@@ -18,8 +18,8 @@ fn main() {
     &f,
     register_count,
     sequence_len,
-    32,
-    26,
+    128,
+    18,
     2
   );
 

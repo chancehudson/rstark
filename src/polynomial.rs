@@ -1,4 +1,4 @@
-use num_bigint::BigInt;
+use num_bigint::{BigInt, Sign};
 use crate::field::Field;
 use std::rc::Rc;
 
@@ -252,16 +252,29 @@ impl Polynomial {
     let left_out = Self::eval_fft(coefs, domain, field, slice_len*2, offset);
     let right_out = Self::eval_fft(coefs, domain, field, slice_len*2, offset + slice_len);
 
-    let mut out = vec!(BigInt::from(0); domain.len()/slice_len_usize);
+    let mut out1: Vec<BigInt> = Vec::new();
+    let mut out2: Vec<BigInt> = Vec::new();
 
     for i in 0..(left_out.len()) {
       let x = &left_out[i];
       let y = &right_out[i];
       let y_root = field.mul(y, &domain[i*slice_len_usize]);
-      out[i] = field.add(x, &y_root);
-      out[i+left_out.len()] = field.sub(x, &y_root);
+      // bring the values into the field using simple arithmetic
+      // instead of relying on modulus
+      // offers a small speedup
+      let mut o1 = x + &y_root;
+      if &o1 > field.p() {
+        o1 -= field.p();
+      }
+      out1.push(o1);
+      let mut o2 = x - &y_root;
+      if o2 < Field::zero() {
+        o2 += field.p();
+      }
+      out2.push(o2);
     }
-    out
+    out1.extend(out2);
+    out1
   }
 
   pub fn eval_fft_inv(coefs: &Vec<BigInt>, domain_inv: &Vec<BigInt>, field: &Rc<Field>) -> Vec<BigInt> {
