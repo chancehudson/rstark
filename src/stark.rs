@@ -429,12 +429,13 @@ impl Stark {
       point.extend(next_trace.clone());
 
       let transition_constraint_values: Vec<BigInt> = transition_constraints.iter().map(|c| c.eval(&point)).collect();
+      let transition_zeroifier_eval_inv = self.field.inv(&transition_zeroifier.eval(&domain_current_index));
 
       let mut terms: Vec<BigInt> = Vec::new();
       terms.push(randomizer_map.get(&current_index).unwrap().to_bigint().unwrap());
       for j in 0..transition_constraint_values.len() {
         let tcv = &transition_constraint_values[j];
-        let q = self.field.div(tcv, &transition_zeroifier.eval(&domain_current_index));
+        let q = self.field.mul(tcv, &transition_zeroifier_eval_inv);
         terms.push(q.clone());
         let shift = transition_constraints_max_degree - transition_quotient_degree_bounds[j];
         terms.push(self.field.mul(&q, &self.field.exp(&domain_current_index, &BigInt::from(shift))));
