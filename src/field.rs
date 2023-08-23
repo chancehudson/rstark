@@ -92,7 +92,7 @@ impl Field {
   }
 
   pub fn neg(&self, v: &BigInt) -> BigInt {
-    self.mul(v, &(&self.p-&Field::one()))
+    self.modd(&(&self.p - v))
   }
 
   pub fn div(&self, v1: &BigInt, v2: &BigInt) -> BigInt {
