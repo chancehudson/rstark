@@ -191,7 +191,8 @@ impl Stark {
       let zeroifier = &boundary_zeroifiers[i];
       let mut q = trace_polys[i].clone();
       q.sub(interpolant);
-      boundary_quotients.push(q.safe_div(zeroifier));
+      boundary_quotients.push(Polynomial::div_coset(&q, &zeroifier, &self.offset, &self.omega, self.fri_domain_len, &self.field))
+      // boundary_quotients.push(q.safe_div(zeroifier));
     }
 
     let mut boundary_quotient_codewords: Vec<Vec<BigUint>> = Vec::new();
@@ -222,7 +223,10 @@ impl Stark {
 
     let transition_polynomials: Vec<Polynomial> = transition_constraints.iter().map(|p| p.eval_symbolic(&point)).collect();
     let transition_zeroifier: Polynomial = self.transition_zeroifier();
-    let transition_quotients: Vec<Polynomial> = transition_polynomials.iter().map(|p| p.safe_div(&transition_zeroifier)).collect();
+    let transition_quotients: Vec<Polynomial> = transition_polynomials.iter().map(|p| {
+      // p.safe_div(&transition_zeroifier)
+      Polynomial::div_coset(&p, &transition_zeroifier, &self.offset, &self.omega, self.fri_domain_len, &self.field)
+    }).collect();
 
     let mut randomizer_poly = Polynomial::new(&self.field);
     let transition_max_degree = self.max_degree(&transition_constraints);

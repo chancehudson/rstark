@@ -255,17 +255,12 @@ impl Polynomial {
     out
   }
 
-  pub fn eval_fft_inv(coefs: &Vec<BigInt>, field: &Rc<Field>) -> Vec<BigInt> {
+  pub fn eval_fft_inv(coefs: &Vec<BigInt>, domain_inv: &Vec<BigInt>, field: &Rc<Field>) -> Vec<BigInt> {
     if coefs.len() == 1 {
       return vec!(coefs[0].clone());
     }
     let len_inv = field.inv(&BigInt::from(u32::try_from(coefs.len()).unwrap()));
-    let domain_size = u32::try_from(coefs.len()).unwrap();
-    let generator = field.generator(&BigInt::from(domain_size));
-    let g_inv = field.inv(&generator);
-    let domain = field.domain(&g_inv, domain_size);
-
-    let out = Self::eval_fft(coefs, &domain, field, 1, 0);
+    let out = Self::eval_fft(coefs, &domain_inv, field, 1, 0);
     out.iter().map(|v| field.mul(&v, &len_inv)).collect()
   }
 
@@ -287,14 +282,68 @@ impl Polynomial {
     for i in 0..domain.len() {
       x3.push(field.mul(&x1[i], &x2[i]));
     }
+    let generator_inv = field.inv(&generator);
+    let domain_inv = field.domain(&generator_inv, domain_size);
 
-    let out = Self::eval_fft_inv(&x3, field);
+    let out = Self::eval_fft_inv(&x3, &domain_inv, field);
     let mut p = Polynomial {
       field: Rc::clone(field),
       coefs: out
     };
     p.trim();
     p
+  }
+
+  pub fn div_coset(
+    poly1: &Polynomial,
+    poly2: &Polynomial,
+    offset: &BigInt,
+    generator: &BigInt,
+    size: u32,
+    field: &Rc<Field>
+  ) -> Polynomial {
+    if poly1.is_zero() {
+      return Polynomial::new(field);
+    }
+    if poly2.is_zero() {
+      panic!("divide by 0");
+    }
+    if poly2.degree() > poly1.degree() {
+      panic!("divisor cannot have degree larger than dividend");
+    }
+    let degree = poly1.degree();
+
+    let mut g = generator.clone();
+    let mut order = size;
+
+    while u32::try_from(degree).unwrap() < order >> 1 {
+      g = field.mul(&g, &g);
+      order >>= 1;
+    }
+
+    let g_inv = field.inv(&g);
+    let domain = field.domain(&g, order);
+    let domain_inv = field.domain(&g_inv, order);
+
+    let mut poly1_scaled = poly1.clone();
+    poly1_scaled.scale(&offset);
+    let mut poly2_scaled = poly2.clone();
+    poly2_scaled.scale(&offset);
+
+    let poly1_codeword = Self::eval_fft(poly1_scaled.coefs(), &domain, field, 1, 0);
+    let poly2_codeword = Self::eval_fft(poly2_scaled.coefs(), &domain, field, 1, 0);
+
+    let out = poly1_codeword.iter().enumerate().map(|(i, val)| {
+      field.div(&val, &poly2_codeword[i])
+    }).collect();
+
+    let scaled_coefs = Self::eval_fft_inv(&out, &domain_inv, field);
+    let mut scaled_poly = Polynomial::new(field);
+    for i in 0..(poly1.degree() - poly2.degree() + 1) {
+      scaled_poly.term(&scaled_coefs[i], u32::try_from(i).unwrap());
+    }
+    scaled_poly.scale(&field.inv(&offset));
+    scaled_poly
   }
 
   // remove and return the largest non-zero coefficient
