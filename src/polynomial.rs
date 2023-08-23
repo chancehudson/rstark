@@ -231,50 +231,76 @@ impl Polynomial {
 
   pub fn eval_batch_coset(&self, offset: &BigInt, size: u32) -> Vec<BigInt> {
     let mut scaled = self.clone();
-    scaled.scale(offset);
+    let offset_domain = self.field.domain(&offset, size);
+    scaled.scale_precalc(offset, &offset_domain);
     let generator = self.field.generator(&BigInt::from(size));
     let domain = self.field.domain(&generator, size);
-    Self::eval_fft(&scaled.coefs(), &domain, &self.field, 1, 0)
+    Self::eval_fft(&scaled.coefs(), &domain, &self.field)
   }
 
   // Evaluate a polynomial over a multiplicative subgroup
   // domain cannot be a coset
   pub fn eval_batch_fft(&self, domain: &Vec<BigInt>) -> Vec<BigInt> {
-    Polynomial::eval_fft(&self.coefs(), domain, &self.field, 1, 0)
+    Polynomial::eval_fft(&self.coefs(), domain, &self.field)
   }
 
-  pub fn eval_fft(coefs: &Vec<BigInt>, domain: &Vec<BigInt>, field: &Rc<Field>, slice_len: u32, offset: u32) -> Vec<BigInt> {
-    let slice_len_usize = usize::try_from(slice_len).unwrap();
+  pub fn eval_fft(coefs: &Vec<BigInt>, domain: &Vec<BigInt>, field: &Rc<Field>) -> Vec<BigInt> {
+    let mut out = vec!(BigInt::from(0); domain.len());
+    Self::eval_fft_(coefs, domain, field, 1, 0, 0, domain.len()/2, & mut out);
+    out
+  }
 
-    if domain.len()/slice_len_usize == 1 {
-      return vec!(coefs.get(usize::try_from(offset).unwrap()).unwrap_or(&BigInt::from(0)).clone());
-    }
-    let left_out = Self::eval_fft(coefs, domain, field, slice_len*2, offset);
-    let right_out = Self::eval_fft(coefs, domain, field, slice_len*2, offset + slice_len);
+  // fft implemented by mutating a single `out` vec
+  // this saves the cost of alloc/freeing vectors
+  // during recursion
+  //
+  // measured improvement of ~10% compared to previous
+  // approach
+  pub fn eval_fft_(
+    coefs: &Vec<BigInt>,
+    domain: &Vec<BigInt>,
+    field: &Rc<Field>,
+    slice_len: usize,
+    offset: usize,
+    left_dest: usize,
+    right_dest: usize,
+    out: & mut Vec<BigInt>
+  ) {
+    let out_size = domain.len() / slice_len;
 
-    let mut out1: Vec<BigInt> = Vec::new();
-    let mut out2: Vec<BigInt> = Vec::new();
-
-    for i in 0..(left_out.len()) {
-      let x = &left_out[i];
-      let y = &right_out[i];
-      let y_root = field.mul(y, &domain[i*slice_len_usize]);
-      // bring the values into the field using simple arithmetic
-      // instead of relying on modulus
-      // offers a small speedup
-      let mut o1 = x + &y_root;
-      if &o1 > field.p() {
-        o1 -= field.p();
+    if out_size == 1 {
+      if let Some(v) = coefs.get(offset) {
+        out[left_dest] = v.clone();
       }
-      out1.push(o1);
-      let mut o2 = x - &y_root;
-      if o2 < Field::zero() {
-        o2 += field.p();
-      }
-      out2.push(o2);
+      // otherwise the coef is 0 which is the default value in `out`
+      return;
     }
-    out1.extend(out2);
-    out1
+
+    Self::eval_fft_(coefs, domain, field, slice_len*2, offset, left_dest, left_dest + out_size/4, out);
+    Self::eval_fft_(coefs, domain, field, slice_len*2, offset + slice_len, right_dest, right_dest + out_size/4, out);
+
+    for i in 0..(out_size/2) {
+      let mut left_out;
+      let mut right_out;
+      {
+        let x = &(&*out)[left_dest + i];
+        let y = &(&*out)[right_dest + i];
+        let y_root = field.mul(y, &domain[i*slice_len]);
+        // bring the values into the field using simple arithmetic
+        // instead of relying on modulus
+        // offers a small speedup
+        left_out = x + &y_root;
+        if &left_out > field.p() {
+          left_out -= field.p();
+        }
+        right_out = x - &y_root;
+        if &y_root > x {
+          right_out += field.p();
+        }
+      }
+      out[left_dest + i] = left_out;
+      out[right_dest + i] = right_out;
+    }
   }
 
   pub fn eval_fft_inv(coefs: &Vec<BigInt>, domain_inv: &Vec<BigInt>, field: &Rc<Field>) -> Vec<BigInt> {
@@ -282,7 +308,7 @@ impl Polynomial {
       return vec!(coefs[0].clone());
     }
     let len_inv = field.inv(&BigInt::from(u32::try_from(coefs.len()).unwrap()));
-    let out = Self::eval_fft(coefs, &domain_inv, field, 1, 0);
+    let out = Self::eval_fft(coefs, &domain_inv, field);
     out.iter().map(|v| field.mul(&v, &len_inv)).collect()
   }
 
@@ -297,8 +323,8 @@ impl Polynomial {
     let generator = field.generator(&BigInt::from(domain_size));
     let domain = field.domain(&generator, domain_size);
 
-    let x1 = Self::eval_fft(poly1.coefs(), &domain, field, 1, 0);
-    let x2 = Self::eval_fft(poly2.coefs(), &domain, field, 1, 0);
+    let x1 = Self::eval_fft(poly1.coefs(), &domain, field);
+    let x2 = Self::eval_fft(poly2.coefs(), &domain, field);
 
     let mut x3: Vec<BigInt> = Vec::new();
     for i in 0..domain.len() {
@@ -353,8 +379,8 @@ impl Polynomial {
     let mut poly2_scaled = poly2.clone();
     poly2_scaled.scale_precalc(&offset, &offset_domain);
 
-    let poly1_codeword = Self::eval_fft(poly1_scaled.coefs(), &domain, field, 1, 0);
-    let poly2_codeword = Self::eval_fft(poly2_scaled.coefs(), &domain, field, 1, 0);
+    let poly1_codeword = Self::eval_fft(poly1_scaled.coefs(), &domain, field);
+    let poly2_codeword = Self::eval_fft(poly2_scaled.coefs(), &domain, field);
 
     let out = poly1_codeword.iter().enumerate().map(|(i, val)| {
       field.div(&val, &poly2_codeword[i])
@@ -365,7 +391,9 @@ impl Polynomial {
     for i in 0..(poly1.degree() - poly2.degree() + 1) {
       scaled_poly.term(&scaled_coefs[i], u32::try_from(i).unwrap());
     }
-    scaled_poly.scale(&field.inv(&offset));
+    let offset_inv = field.inv(&offset);
+    let offset_domain_inv = field.domain(&offset_inv, order);
+    scaled_poly.scale_precalc(&offset_inv, &offset_domain_inv);
     scaled_poly
   }
 
