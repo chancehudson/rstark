@@ -1,4 +1,4 @@
-use num_bigint::{BigInt, Sign};
+use num_bigint::{BigInt};
 use crate::field::Field;
 use std::rc::Rc;
 
@@ -140,7 +140,7 @@ impl Polynomial {
 
   // if we're scaling the polynomial using a generator point or similar
   // we probably already have a list of the exponents laying around
-  pub fn scale_precalc(& mut self, v: &BigInt, exps: &Vec<BigInt>) -> &Self {
+  pub fn scale_precalc(& mut self, _v: &BigInt, exps: &Vec<BigInt>) -> &Self {
     self.coefs = self.coefs.iter().enumerate().map(|(exp, coef)| {
       return self.field.mul(&exps[exp], &coef);
     }).collect();
@@ -516,7 +516,7 @@ impl Polynomial {
     }).collect();
 
     let left_interpolant = Self::interpolate_fft_batch(&x_vals[0..half], &left_targets[0..], field);
-    let mut right_interpolant = Self::interpolate_fft_batch(&x_vals[half..], &right_targets[0..], field);
+    let right_interpolant = Self::interpolate_fft_batch(&x_vals[half..], &right_targets[0..], field);
 
     let mut out: Vec<Polynomial> = Vec::new();
     for i in 0..left_interpolant.len() {
@@ -752,13 +752,13 @@ mod tests {
     }
 
     let size = 2_u32.pow(7);
-    let mut G: Vec<BigInt> = Vec::new();
+    let mut g_domain: Vec<BigInt> = Vec::new();
     for i in 0..size {
-      G.push(BigInt::from(i));
+      g_domain.push(BigInt::from(i));
     }
 
-    let actual = poly.eval_batch(&G);
-    let out = poly.eval_batch_fast(&G);
+    let actual = poly.eval_batch(&g_domain);
+    let out = poly.eval_batch_fast(&g_domain);
     for i in 0..usize::try_from(size).unwrap() {
       assert_eq!(actual[i], out[i]);
     }
@@ -777,13 +777,13 @@ mod tests {
 
     let size = 2_u32.pow(8);
     let sub_g = f.generator(&BigInt::from(size));
-    let mut G: Vec<BigInt> = Vec::new();
+    let mut g_domain: Vec<BigInt> = Vec::new();
     for i in 0..size {
-      G.push(f.exp(&sub_g, &BigInt::from(i)));
+      g_domain.push(f.exp(&sub_g, &BigInt::from(i)));
     }
 
-    let actual = poly.eval_batch(&G);
-    let out = poly.eval_batch_fft(&G);
+    let actual = poly.eval_batch(&g_domain);
+    let out = poly.eval_batch_fft(&g_domain);
     for i in 0..usize::try_from(size).unwrap() {
       assert_eq!(actual[i], out[i]);
     }

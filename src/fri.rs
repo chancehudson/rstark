@@ -6,7 +6,6 @@ use crate::tree::Tree;
 use crate::channel::Channel;
 use crate::polynomial::Polynomial;
 use std::collections::HashMap;
-use std::collections::VecDeque;
 
 pub struct FriOptions {
   pub offset: BigInt,
@@ -97,22 +96,15 @@ impl Fri {
   fn commit(&self, codeword: &Vec<BigUint>, channel: & mut Channel) -> Vec<Vec<BigUint>> {
     let mut codewords: Vec<Vec<BigUint>> = Vec::new();
     let mut codeword = codeword.clone();
-    let mut omega = self.omega.clone();
-    let mut offset = self.offset.clone();
     let two_inv = self.field.inv(&BigInt::from(2));
-    let zero = BigUint::from(0 as u32);
-
-    let domain = self.field.domain(&omega, self.domain_len);
-    // only build the part we need
-    let offset_domain = self.field.domain(&offset, 2_u32.pow(self.round_count()));
 
     // invert the entire domain using repeated multiplications
     // e.g. 1/4 = (1/2) * (1/2)
     // 1/x^2 = (1/x) * (1/x)
-    let inv_offset = self.field.inv(&offset);
+    let inv_offset = self.field.inv(&self.offset);
     let inv_offset_domain = self.field.domain(&inv_offset, 2_u32.pow(self.round_count()));
 
-    let inv_omega = self.field.inv(&omega);
+    let inv_omega = self.field.inv(&self.omega);
     let inv_domain = self.field.domain(&inv_omega, self.domain_len);
 
     let mut exp: usize = 1;
@@ -184,7 +176,7 @@ impl Fri {
     let mut roots: Vec<BigUint> = Vec::new();
     let mut alphas: Vec<BigUint> = Vec::new();
 
-    for i in 0..self.round_count() {
+    for _ in 0..self.round_count() {
       roots.push(channel.pull().data[0].clone());
       alphas.push(self.field.sample(&channel.verifier_hash().to_bigint().unwrap()).to_biguint().unwrap());
     }

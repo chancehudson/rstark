@@ -117,7 +117,6 @@ impl Field {
   }
 
   pub fn inv(&self, v: &BigInt) -> BigInt {
-    let mut val = self.modd(&v.clone());
     let e_gcd = v.clone().extended_gcd(&self.p);
     if e_gcd.gcd != BigInt::from(1) {
       panic!("modinv does not exist");
@@ -176,7 +175,7 @@ impl Field {
     // build, insert, and return
     let mut domain: Vec<BigInt> = Vec::new();
     domain.push(BigInt::from(1));
-    for i in 1..size {
+    for _ in 1..size {
       domain.push(self.mul(&domain[domain.len() - 1], &generator));
     }
     let d = domain.clone();

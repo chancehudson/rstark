@@ -499,7 +499,7 @@ mod tests {
 
     let variables = MPolynomial::variables(1+2*2, &f);
 
-    let cycle_index = &variables[0];
+    let _cycle_index = &variables[0];
     let prev_state = &variables[1..3];
     let next_state = &variables[3..];
     let mut transition_constraints: Vec<MPolynomial> = Vec::new();

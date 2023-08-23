@@ -2,9 +2,7 @@ use rstark::field::Field;
 use rstark::stark::Stark;
 use rstark::mpolynomial::MPolynomial;
 use std::rc::Rc;
-use num_bigint::{BigInt, BigUint, ToBigInt};
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
+use num_bigint::{BigInt};
 
 fn main() {
   let p = BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119);
@@ -47,7 +45,7 @@ fn main() {
 
   let register_count_usize = usize::try_from(register_count).unwrap();
 
-  let cycle_index = &variables[0];
+  let _cycle_index = &variables[0];
   let prev_state = &variables[1..(1+register_count_usize)];
   let next_state = &variables[(1+register_count_usize)..];
   let mut transition_constraints: Vec<MPolynomial> = Vec::new();
