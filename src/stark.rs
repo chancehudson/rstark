@@ -19,6 +19,7 @@ pub struct Stark {
   randomized_trace_len: u32,
   expansion_factor: u32,
   omega: BigInt,
+  omega_domain: Vec<BigInt>,
   fri_domain_len: u32,
   omicron: BigInt,
   omicron_domain_len: u32,
@@ -61,6 +62,7 @@ impl Stark {
       expansion_factor,
       omicron_domain_len,
       omicron: omicron.clone(),
+      omega_domain: field.domain(&omega, fri_domain_len),
       omega,
       omicron_domain: field.domain(&omicron, omicron_domain_len),
       fri,
@@ -120,7 +122,7 @@ impl Stark {
       let points: Vec<BigInt> = boundary
         .iter()
         .filter(|(_c, r, _v)| r == &i)
-        .map(|(c, _r, _v)| self.field.exp(&self.omicron, &BigInt::from(c.clone())))
+        .map(|(c, _r, _v)| self.omicron_domain[usize::try_from(c.clone()).unwrap()].clone())
         .collect();
       zeroifiers.push(Polynomial::zeroifier_fft(&points, &self.field));
     }
@@ -136,7 +138,8 @@ impl Stark {
         if r != &u32::try_from(i).unwrap() {
           continue;
         }
-        domain.push(self.field.exp(&self.omicron, &BigInt::from(c.clone())));
+        domain.push(self.omicron_domain[usize::try_from(c.clone()).unwrap()].clone());
+        // domain.push(self.field.exp(&self.omicron, &BigInt::from(c.clone())));
         values.push(v.clone());
       }
       // interpolants.push(Polynomial::lagrange(&domain, &values, &self.field));
@@ -264,16 +267,16 @@ impl Stark {
     for i in 0..transition_quotients.len() {
       terms.push(transition_quotients[i].clone());
       let shift = transition_max_degree - transition_quotient_degree_bounds[i];
-      let mut shifted = p_x.clone();
-      shifted.exp(usize::try_from(shift).unwrap());
+      let mut shifted = Polynomial::new(&self.field);
+      shifted.term(&BigInt::from(1), shift);
       shifted.mul(&transition_quotients[i]);
       terms.push(shifted);
     }
     for i in 0..(usize::try_from(self.register_count).unwrap()) {
       terms.push(boundary_quotients[i].clone());
       let shift = transition_max_degree - boundary_quotient_degree_bounds[i];
-      let mut shifted = p_x.clone();
-      shifted.exp(usize::try_from(shift).unwrap());
+      let mut shifted = Polynomial::new(&self.field);
+      shifted.term(&BigInt::from(1), shift);
       shifted.mul(&boundary_quotients[i]);
       terms.push(shifted);
     }
@@ -400,9 +403,9 @@ impl Stark {
 
     for i in 0..indices.len() {
       let current_index = indices[i];
-      let domain_current_index = self.field.mul(&self.field.g(), &self.field.exp(&self.omega, &BigInt::from(current_index)));
+      let domain_current_index = self.field.mul(&self.field.g(), &self.omega_domain[usize::try_from(current_index).unwrap()]);
       let next_index = (current_index + self.expansion_factor) % self.fri_domain_len;
-      let domain_next_index = self.field.mul(&self.field.g(), &self.field.exp(&self.omega, &BigInt::from(next_index)));
+      let domain_next_index = self.field.mul(&self.field.g(), &self.omega_domain[usize::try_from(next_index).unwrap()]);
       let mut current_trace = vec!(BigInt::from(0); usize::try_from(self.register_count).unwrap());
       let mut next_trace = vec!(BigInt::from(0); usize::try_from(self.register_count).unwrap());
 
