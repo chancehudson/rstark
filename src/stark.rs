@@ -217,7 +217,7 @@ impl Stark {
     point.extend(trace_polys.clone());
     point.extend(trace_polys.iter().map(|p| {
       let mut pp = p.clone();
-      pp.scale(&self.omicron);
+      pp.scale_precalc(&self.omicron, &self.omicron_domain);
       pp
     }));
 

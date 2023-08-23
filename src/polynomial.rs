@@ -138,6 +138,15 @@ impl Polynomial {
     self
   }
 
+  // if we're scaling the polynomial using a generator point or similar
+  // we probably already have a list of the exponents laying around
+  pub fn scale_precalc(& mut self, v: &BigInt, exps: &Vec<BigInt>) -> &Self {
+    self.coefs = self.coefs.iter().enumerate().map(|(exp, coef)| {
+      return self.field.mul(&exps[exp], &coef);
+    }).collect();
+    self
+  }
+
   pub fn scale(& mut self, v: &BigInt) -> &Self {
     self.coefs = self.coefs.iter().enumerate().map(|(exp, coef)| {
       return self.field.mul(&self.field.exp(&v, &BigInt::from(exp)), &coef);
@@ -162,7 +171,7 @@ impl Polynomial {
   pub fn trim(& mut self) {
     let mut new_len = self.coefs.len();
     let zero = Field::zero();
-    for i in self.coefs.len()..0 {
+    for i in (0..self.coefs.len()).rev() {
       if self.coefs[i] != zero {
         break;
       }
@@ -324,11 +333,12 @@ impl Polynomial {
     let g_inv = field.inv(&g);
     let domain = field.domain(&g, order);
     let domain_inv = field.domain(&g_inv, order);
+    let offset_domain = field.domain(&offset, order);
 
     let mut poly1_scaled = poly1.clone();
-    poly1_scaled.scale(&offset);
+    poly1_scaled.scale_precalc(&offset, &offset_domain);
     let mut poly2_scaled = poly2.clone();
-    poly2_scaled.scale(&offset);
+    poly2_scaled.scale_precalc(&offset, &offset_domain);
 
     let poly1_codeword = Self::eval_fft(poly1_scaled.coefs(), &domain, field, 1, 0);
     let poly2_codeword = Self::eval_fft(poly2_scaled.coefs(), &domain, field, 1, 0);
