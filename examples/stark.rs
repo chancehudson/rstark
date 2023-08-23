@@ -11,49 +11,50 @@ fn main() {
   let g = BigInt::from(85408008396924667383611388730472331217_u128);
   let f = Rc::new(Field::new(p, g.clone()));
 
-  let sequence_len = 400;
+  let register_count = 40;
+  let sequence_len = 40;
   let stark = Stark::new(
     &g.clone(),
     &f,
-    2,
+    register_count,
     sequence_len,
     32,
-    32,
+    26,
     2
   );
 
+  let first_step = (0..register_count).map(|v| 2 + BigInt::from(v)).collect();
+
   let mut trace: Vec<Vec<BigInt>> = Vec::new();
-  trace.push(vec!(BigInt::from(2), BigInt::from(3)));
-  trace.push(vec!(BigInt::from(4), BigInt::from(9)));
+  trace.push(first_step);
   while trace.len() < sequence_len.try_into().unwrap() {
-    let e1 = &trace[trace.len() - 1][0];
-    let e2 = &trace[trace.len() - 1][1];
-    trace.push(vec!(f.mul(e1, e1), f.mul(e2, e2)));
+    let last = &trace[trace.len() - 1];
+    let mut next: Vec<BigInt> = Vec::new();
+    for i in last {
+      next.push(f.mul(&i, &i));
+    }
+    trace.push(next);
+  }
+  let mut boundary_constraints: Vec<(u32, u32, BigInt)> = Vec::new();
+  for (i, v) in trace[0].iter().enumerate() {
+    boundary_constraints.push((0, i as u32, v.clone()));
+  }
+  for (i, v) in trace[trace.len() - 1].iter().enumerate() {
+    boundary_constraints.push((register_count-1, i as u32, v.clone()));
   }
 
-  let boundary_constraints = vec!(
-    (0, 0, BigInt::from(2)),
-    (0, 1, BigInt::from(3)),
-    (sequence_len-1, 0, trace[trace.len()-1][0].clone()),
-    (sequence_len-1, 1, trace[trace.len()-1][1].clone())
-  );
+  let variables = MPolynomial::variables(1+2*register_count, &f);
 
-  let variables = MPolynomial::variables(1+2*2, &f);
+  let register_count_usize = usize::try_from(register_count).unwrap();
 
   let cycle_index = &variables[0];
-  let prev_state = &variables[1..3];
-  let next_state = &variables[3..];
+  let prev_state = &variables[1..(1+register_count_usize)];
+  let next_state = &variables[(1+register_count_usize)..];
   let mut transition_constraints: Vec<MPolynomial> = Vec::new();
-  {
-    let mut c = prev_state[0].clone();
-    c.mul(&prev_state[0]);
-    c.sub(&next_state[0]);
-    transition_constraints.push(c);
-  }
-  {
-    let mut c = prev_state[1].clone();
-    c.mul(&prev_state[1]);
-    c.sub(&next_state[1]);
+  for i in 0..register_count_usize {
+    let mut c = prev_state[i].clone();
+    c.mul(&prev_state[i]);
+    c.sub(&next_state[i]);
     transition_constraints.push(c);
   }
 
