@@ -31,14 +31,26 @@ pub struct VerifyInput {
   boundary: Vec<(u32, u32, BigUint)>
 }
 
-#[wasm_bindgen]
-pub fn prove(input: JsValue) -> String {
-
-  let input: ProveInput = serde_wasm_bindgen::from_value(input).unwrap();
-
+fn stark_(trace_len: u32, register_count: u32) -> Stark {
   let p = BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119);
   let g = BigInt::from(85408008396924667383611388730472331217_u128);
   let f = Rc::new(Field::new(p, g.clone()));
+
+  Stark::new(
+    &g.clone(),
+    &f,
+    register_count,
+    trace_len,
+    32, // expansion factor
+    26, // colinearity tests
+    2 // constraint degree
+  )
+}
+
+#[wasm_bindgen]
+pub fn prove(input: JsValue) -> String {
+  let input: ProveInput = serde_wasm_bindgen::from_value(input).unwrap();
+
   let register_count = input.trace[0].len();
   for i in 1..input.trace.len() {
     if input.trace[i].len() != register_count {
@@ -46,20 +58,11 @@ pub fn prove(input: JsValue) -> String {
       panic!();
     }
   }
-
-  let stark = Stark::new(
-    &g.clone(),
-    &f,
-    u32::try_from(register_count).unwrap(),
-    input.trace.len().try_into().unwrap(),
-    32,
-    26,
-    2
-  );
+  let stark = stark_(input.trace.len().try_into().unwrap(), register_count.try_into().unwrap());
 
   let transition_constraints = input.transition_constraints
     .iter()
-    .map(|v| MPolynomial::from_map(&v, &f))
+    .map(|v| MPolynomial::from_map(&v, stark.field()))
     .collect();
   let boundary_constraints = input.boundary
     .iter()
@@ -77,23 +80,11 @@ pub fn prove(input: JsValue) -> String {
 pub fn verify(proof: String, input: JsValue) {
   let input: VerifyInput = serde_wasm_bindgen::from_value(input).unwrap();
 
-  let p = BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119);
-  let g = BigInt::from(85408008396924667383611388730472331217_u128);
-  let f = Rc::new(Field::new(p, g.clone()));
-
-  let stark = Stark::new(
-    &g.clone(),
-    &f,
-    input.register_count,
-    input.trace_len,
-    32,
-    26,
-    2
-  );
+  let stark = stark_(input.trace_len, input.register_count);
 
   let transition_constraints: Vec<MPolynomial> = input.transition_constraints
     .iter()
-    .map(|v| MPolynomial::from_map(&v, &f))
+    .map(|v| MPolynomial::from_map(&v, stark.field()))
     .collect();
   let boundary_constraints: Vec<(u32, u32, BigInt)> = input.boundary
     .iter()

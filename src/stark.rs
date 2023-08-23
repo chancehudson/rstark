@@ -68,6 +68,10 @@ impl Stark {
     }
   }
 
+  pub fn field(&self) -> &Rc<Field> {
+    &self.field
+  }
+
   fn transition_degree_bounds(&self, constraints: &Vec<MPolynomial>) -> Vec<u32> {
     let degree: u32 = self.original_trace_len + self.randomizer_count - 1;
     let mut point_degrees: Vec<u32> = vec!(degree; usize::try_from(1+2*self.register_count).unwrap());
