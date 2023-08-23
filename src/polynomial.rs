@@ -505,23 +505,27 @@ impl Polynomial {
     let left_offset = right_zeroifier.eval_batch_fast_slice(&x_vals[0..half]);
     let right_offset = left_zeroifier.eval_batch_fast_slice(&x_vals[half..]);
 
+    let left_offset_invs: Vec<BigInt> = left_offset.iter().map(|v| field.inv(&v)).collect();
+    let right_offset_invs: Vec<BigInt> = right_offset.iter().map(|v| field.inv(&v)).collect();
+
     let left_targets: Vec<Vec<BigInt>> = y_vals.iter().map(|vals| {
-      vals[0..half].iter().enumerate().map(|(i, v)| field.div(v, &left_offset[i])).collect::<Vec<BigInt>>()
+      vals[0..half].iter().enumerate().map(|(i, v)| field.mul(v, &left_offset_invs[i])).collect::<Vec<BigInt>>()
     }).collect();
     let right_targets: Vec<Vec<BigInt>> = y_vals.iter().map(|vals| {
-      vals[half..].iter().enumerate().map(|(i, v)| field.div(v, &right_offset[i])).collect::<Vec<BigInt>>()
+      vals[half..].iter().enumerate().map(|(i, v)| field.mul(v, &right_offset_invs[i])).collect::<Vec<BigInt>>()
     }).collect();
 
     let left_interpolant = Self::interpolate_fft_batch(&x_vals[0..half], &left_targets[0..], field);
     let mut right_interpolant = Self::interpolate_fft_batch(&x_vals[half..], &right_targets[0..], field);
 
-    left_interpolant.iter().enumerate().map(|(i, poly)| {
-      let mut left = poly.clone();
-      left.mul(&right_zeroifier);
-      right_interpolant[i].mul(&left_zeroifier);
-      left.add(&right_interpolant[i]);
-      left
-    }).collect()
+    let mut out: Vec<Polynomial> = Vec::new();
+    for i in 0..left_interpolant.len() {
+      let mut left = Polynomial::mul_fft(&left_interpolant[i], &right_zeroifier, &field);
+      let right = Polynomial::mul_fft(&right_interpolant[i], &left_zeroifier, &field);
+      left.add(&right);
+      out.push(left);
+    }
+    out
   }
 
   pub fn test_colinearity(x_vals: &Vec<BigInt>, y_vals: &Vec<BigInt>, field: &Rc<Field>) -> bool {
