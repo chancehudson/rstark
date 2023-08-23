@@ -11,7 +11,7 @@ fn main() {
   let g = BigInt::from(85408008396924667383611388730472331217_u128);
   let f = Rc::new(Field::new(p, g.clone()));
 
-  let sequence_len = 40;
+  let sequence_len = 400;
   let stark = Stark::new(
     &g.clone(),
     &f,

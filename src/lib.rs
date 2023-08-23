@@ -52,8 +52,8 @@ pub fn prove(input: JsValue) -> String {
     &f,
     u32::try_from(register_count).unwrap(),
     input.trace.len().try_into().unwrap(),
-    4,
-    8,
+    32,
+    26,
     2
   );
 
@@ -86,8 +86,8 @@ pub fn verify(proof: String, input: JsValue) {
     &f,
     input.register_count,
     input.trace_len,
-    4,
-    8,
+    32,
+    26,
     2
   );
 
