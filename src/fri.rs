@@ -6,6 +6,7 @@ use crate::tree::Tree;
 use crate::channel::Channel;
 use crate::polynomial::Polynomial;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 pub struct FriOptions {
   pub offset: BigInt,
@@ -105,6 +106,15 @@ impl Fri {
     // only build the part we need
     let offset_domain = self.field.domain(&offset, 2_u32.pow(self.round_count()));
 
+    // invert the entire domain using repeated multiplications
+    // e.g. 1/4 = (1/2) * (1/2)
+    // 1/x^2 = (1/x) * (1/x)
+    let inv_offset = self.field.inv(&offset);
+    let inv_offset_domain = self.field.domain(&inv_offset, 2_u32.pow(self.round_count()));
+
+    let inv_omega = self.field.inv(&omega);
+    let inv_domain = self.field.domain(&inv_omega, self.domain_len);
+
     let mut exp: usize = 1;
 
     for x in 0..self.round_count() {
@@ -121,7 +131,7 @@ impl Fri {
       let next_len = codeword.len() >> 1;
       codeword = codeword[0..next_len].iter().enumerate().map(|(index, val)| {
         let ival = val.to_bigint().unwrap();
-        let inv_omega = self.field.inv(&self.field.lmul(&offset_domain[exp], &domain[exp * index]));
+        let inv_omega = self.field.mul(&inv_offset_domain[exp], &inv_domain[exp * index]);
         // ( (one + alpha / (offset * (omega^i)) ) * codeword[i]
         let a = self.field.mul(&ival, &self.field.ladd(&Field::one(), &self.field.lmul(&alpha, &inv_omega)));
         //  (one - alpha / (offset * (omega^i)) ) * codeword[len(codeword)//2 + i] ) for i in range(len(codeword)//2)]
