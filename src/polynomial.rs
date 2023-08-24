@@ -105,6 +105,18 @@ impl Polynomial {
     self
   }
 
+  // a fast method for multiplying by a single term polynomial
+  // with a coefficient of 1
+  // e.g. multiplying by x^5
+  pub fn shift_and_clone(&self, degree: u32) -> Self {
+    let degree_usize = usize::try_from(degree).unwrap();
+    let mut shifted_coefs = vec!(BigInt::from(0); degree_usize);
+    shifted_coefs.extend(self.coefs.clone());
+    let mut out = Polynomial::new(&self.field);
+    out.coefs = shifted_coefs;
+    out
+  }
+
   pub fn mul(& mut self, poly: &Polynomial) -> &Self {
     let mut out: Vec<BigInt> = Vec::new();
     out.resize(self.coefs.len() + poly.coefs().len(), Field::zero());

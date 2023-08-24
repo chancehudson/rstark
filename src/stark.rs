@@ -273,18 +273,12 @@ impl Stark {
     for i in 0..transition_quotients.len() {
       terms.push(transition_quotients[i].clone());
       let shift = transition_max_degree - transition_quotient_degree_bounds[i];
-      let mut shifted = Polynomial::new(&self.field);
-      shifted.term(&BigInt::from(1), shift);
-      shifted.mul(&transition_quotients[i]);
-      terms.push(shifted);
+      terms.push(transition_quotients[i].shift_and_clone(shift));
     }
     for i in 0..(usize::try_from(self.register_count).unwrap()) {
       terms.push(boundary_quotients[i].clone());
       let shift = transition_max_degree - boundary_quotient_degree_bounds[i];
-      let mut shifted = Polynomial::new(&self.field);
-      shifted.term(&BigInt::from(1), shift);
-      shifted.mul(&boundary_quotients[i]);
-      terms.push(shifted);
+      terms.push(boundary_quotients[i].shift_and_clone(shift));
     }
 
     let mut combination = Polynomial::new(&self.field);
