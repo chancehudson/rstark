@@ -388,8 +388,10 @@ impl Polynomial {
     let poly1_codeword = Self::eval_fft(poly1_scaled.coefs(), &domain, field);
     let poly2_codeword = Self::eval_fft(poly2_scaled.coefs(), &domain, field);
 
+    let poly2_codeword_inv = field.inv_batch(&poly2_codeword);
+
     let out = poly1_codeword.iter().enumerate().map(|(i, val)| {
-      field.div(&val, &poly2_codeword[i])
+      field.mul(&val, &poly2_codeword_inv[i])
     }).collect();
 
     let scaled_coefs = Self::eval_fft_inv(&out, &domain_inv, field);

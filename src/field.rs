@@ -124,6 +124,21 @@ impl Field {
     self.add(&e_gcd.x, &self.p)
   }
 
+  pub fn inv_batch(&self, values: &Vec<BigInt>) -> Vec<BigInt> {
+    let mut last = BigInt::from(1);
+    let mut result: Vec<BigInt> = Vec::new();
+    for v in values {
+      result.push(last.clone());
+      last = self.mul(&last, &v);
+    }
+    last = self.inv(&last);
+    for i in (0..values.len()).rev() {
+      result[i] = self.mul(&result[i], &last);
+      last = self.mul(&values[i], &last);
+    }
+    result
+  }
+
   pub fn random(&self) -> BigInt {
     let mut rng = rand::thread_rng();
     self.bigint(rng.gen())
