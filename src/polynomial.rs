@@ -573,9 +573,35 @@ impl Polynomial {
     out
   }
 
+  pub fn test_colinearity_batch(x_vals_arr: &Vec<Vec<BigInt>>, y_vals_arr: &Vec<Vec<BigInt>>, field: &Rc<Field>) -> bool {
+    let mut to_inv: Vec<BigInt> = Vec::new();
+    for x_vals in x_vals_arr {
+      to_inv.push(field.sub(&x_vals[1], &x_vals[0]));
+      to_inv.push(field.sub(&x_vals[2], &x_vals[1]));
+    }
+    let inverted = field.inv_batch(&to_inv);
+    for (i, y_vals) in y_vals_arr.iter().enumerate() {
+      let x_diff_inv_1 = &inverted[2*i];
+      let x_diff_inv_2 = &inverted[2*i + 1];
+      let y_diff_1 = field.sub(&y_vals[1], &y_vals[0]);
+      let y_diff_2 = field.sub(&y_vals[2], &y_vals[1]);
+      let slope_1 = field.mul(&y_diff_1, x_diff_inv_1);
+      let slope_2 = field.mul(&y_diff_2, x_diff_inv_2);
+      if slope_1 != slope_2 {
+        return false;
+      }
+    }
+    return true;
+  }
+
   pub fn test_colinearity(x_vals: &Vec<BigInt>, y_vals: &Vec<BigInt>, field: &Rc<Field>) -> bool {
-    let poly = Polynomial::lagrange(x_vals, y_vals, field);
-    return poly.degree() <= 1;
+    let x_diff_1 = field.sub(&x_vals[1], &x_vals[0]);
+    let y_diff_1 = field.sub(&y_vals[1], &y_vals[0]);
+    let slope_1 = field.div(&y_diff_1, &x_diff_1);
+    let x_diff_2 = field.sub(&x_vals[2], &x_vals[1]);
+    let y_diff_2 = field.sub(&y_vals[2], &y_vals[1]);
+    let slope_2 = field.div(&y_diff_2, &x_diff_2);
+    return slope_1 == slope_2;
   }
 
   pub fn zeroifier_fft(points: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
@@ -634,6 +660,7 @@ mod tests {
       y_vals.push(poly.eval(&BigInt::from(i)));
     }
     assert!(Polynomial::test_colinearity(&x_vals, &y_vals, &f));
+    assert!(Polynomial::test_colinearity_batch(&vec!(x_vals), &vec!(y_vals), &f));
   }
 
   #[test]

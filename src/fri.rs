@@ -224,6 +224,8 @@ impl Fri {
       self.domain_len >> (self.round_count() - 1),
       self.colinearity_test_count
     );
+    let mut colinearity_x_vals: Vec<Vec<BigInt>> = Vec::new();
+    let mut colinearity_y_vals: Vec<Vec<BigInt>> = Vec::new();
     for i in 0..usize::try_from(self.round_count() - 1).unwrap() {
       let indices_c: Vec<u32> = top_indices.iter().map(|val| val % (self.domain_len >> (i+1))).collect();
       let indices_a: Vec<u32> = indices_c.clone();
@@ -250,9 +252,12 @@ impl Fri {
 
         let cx = alphas[usize::try_from(i).unwrap()].clone();
 
-        if !Polynomial::test_colinearity(&vec!(ax, bx, cx.to_bigint().unwrap()), &vec!(ay.to_bigint().unwrap(), by.to_bigint().unwrap(), cy.to_bigint().unwrap()), &self.field) {
+        colinearity_x_vals.push(vec!(ax, bx, cx.to_bigint().unwrap()));
+        colinearity_y_vals.push(vec!(ay.to_bigint().unwrap(), by.to_bigint().unwrap(), cy.to_bigint().unwrap()));
+      }
+
+      if !Polynomial::test_colinearity_batch(&colinearity_x_vals, &colinearity_y_vals, &self.field) {
           panic!("colinearity test failed");
-        }
       }
 
       for j in 0..usize::try_from(self.colinearity_test_count).unwrap() {
