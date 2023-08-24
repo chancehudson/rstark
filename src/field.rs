@@ -32,13 +32,13 @@ impl Field {
     }
 
     // build a cache of generators and inverted generators
-    let mut start = 2;
+    let mut start = 1;
     let mut sizes: Vec<u32> = Vec::new();
     let mut generators: Vec<BigInt> = Vec::new();
     for _ in 0..31 {
+      start *= 2;
       generators.push(f.generator(&BigInt::from(start)));
       sizes.push(start);
-      start *= 2;
     }
     let generators_inv = f.inv_batch(&generators);
     for i in 0..(generators.len()) {
