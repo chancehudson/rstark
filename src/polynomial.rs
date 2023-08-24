@@ -453,11 +453,9 @@ impl Polynomial {
       let new_coef = self.field.mul(&largest_term.0, &divisor_term_inv);
       let new_exp = largest_term.1 - divisor_term.1;
       q.term(&new_coef, new_exp.try_into().unwrap());
-      let mut t = Polynomial::new(&self.field);
-      t.term(&new_coef, new_exp.try_into().unwrap());
-      t.mul(divisor);
+      let mut t = divisor.shift_and_clone(u32::try_from(new_exp).unwrap());
+      t.mul_scalar(&new_coef);
       inter.sub(&t);
-      // inter.sub(&Polynomial::mul_fft(&t, &divisor, &self.field));
     }
     (q, inter)
   }
