@@ -138,6 +138,28 @@ impl MPolynomial {
 
   pub fn eval_symbolic(&self, polys: &Vec<Polynomial>) -> Polynomial {
     let mut out = Polynomial::new(&self.field);
+    let mut degrees: Vec<u32> = Vec::new();
+    for (exps, coef) in self.exps() {
+      for (i, e) in exps.iter().enumerate() {
+        if i >= degrees.len() {
+          degrees.resize(i+1, 0);
+        }
+        if e+1 > degrees[i] {
+          degrees[i] = e + 1;
+        }
+      }
+    }
+    let mut one = Polynomial::new(&self.field);
+    one.term(&BigInt::from(1), 0);
+    let mut power_map: Vec<Vec<Polynomial>> = Vec::new();
+    for (i, d) in degrees.iter().enumerate() {
+      let mut poly_powers: Vec<Polynomial> = Vec::new();
+      poly_powers.push(one.clone());
+      for j in 1..usize::try_from(d.clone()).unwrap() {
+        poly_powers.push(Polynomial::mul_fft(&poly_powers[j-1], &polys[i], &self.field));
+      }
+      power_map.push(poly_powers);
+    }
     for (exps, coef) in self.exps() {
       let mut inter = Polynomial::new(&self.field);
       inter.term(&coef, 0);
@@ -145,7 +167,7 @@ impl MPolynomial {
         if exps[i] == 0 {
           continue;
         }
-        inter.mul(polys[i].clone().exp(usize::try_from(exps[i]).unwrap()));
+        inter = Polynomial::mul_fft(&inter, &power_map[i][usize::try_from(exps[i]).unwrap()], &self.field);
       }
       out.add(&inter);
     }
@@ -269,8 +291,8 @@ mod tests {
 
   #[test]
   fn should_eval_symbolic_multipolynomial() {
-    let p = BigInt::from(101);
-    let g = BigInt::from(0);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     // 4x + 2y^2 + 9
