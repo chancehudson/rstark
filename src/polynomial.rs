@@ -183,6 +183,12 @@ impl Polynomial {
   // using horners method
   // https://en.wikipedia.org/wiki/Horner%27s_method
   pub fn eval(&self, v: &BigInt) -> BigInt {
+    if self.coefs.len() == 0 {
+      return BigInt::from(0);
+    }
+    if self.coefs.len() == 1 {
+      return self.coefs[0].clone();
+    }
     let mut out = self.field.mul(&v, &self.coefs[self.coefs.len() - 1]);
     for coef in self.coefs[1..(self.coefs.len()-1)].iter().rev() {
       out = self.field.mul(&v, &self.field.ladd(&coef, &out));

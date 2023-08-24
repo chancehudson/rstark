@@ -124,7 +124,13 @@ impl Stark {
         .filter(|(_c, r, _v)| r == &i)
         .map(|(c, _r, _v)| self.omicron_domain[usize::try_from(c.clone()).unwrap()].clone())
         .collect();
-      zeroifiers.push(Polynomial::zeroifier_fft(&points, &self.field));
+      if points.len() == 0 {
+        let mut p = Polynomial::new(&self.field);
+        p.term(&self.omicron, 0);
+        zeroifiers.push(p)
+      } else {
+        zeroifiers.push(Polynomial::zeroifier_fft(&points, &self.field));
+      }
     }
     zeroifiers
   }
