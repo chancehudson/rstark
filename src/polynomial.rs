@@ -239,7 +239,7 @@ impl Polynomial {
     let mut scaled = self.clone();
     let offset_domain = self.field.domain(&offset, size);
     scaled.scale_precalc(offset, &offset_domain);
-    let generator = self.field.generator(&BigInt::from(size));
+    let (generator, _) = self.field.generator_cache(&size);
     let domain = self.field.domain(&generator, size);
     Self::eval_fft(&scaled.coefs(), &domain, &self.field)
   }
@@ -319,14 +319,14 @@ impl Polynomial {
   }
 
   pub fn mul_fft(poly1: &Polynomial, poly2: &Polynomial, field: &Rc<Field>) -> Polynomial {
-    if poly1.degree() + poly2.degree() < 20 {
+    if poly1.degree() + poly2.degree() < 8 {
       let mut o = poly1.clone();
       o.mul(&poly2);
       return o;
     }
     let out_degree = 2*std::cmp::max(poly1.degree(), poly2.degree());
     let domain_size = 2_u32.pow(u32::try_from(out_degree).unwrap().ilog2() + 1);
-    let generator = field.generator(&BigInt::from(domain_size));
+    let (generator, generator_inv) = field.generator_cache(&domain_size);
     let domain = field.domain(&generator, domain_size);
 
     let x1 = Self::eval_fft(poly1.coefs(), &domain, field);
@@ -336,7 +336,6 @@ impl Polynomial {
     for i in 0..domain.len() {
       x3.push(field.mul(&x1[i], &x2[i]));
     }
-    let generator_inv = field.inv(&generator);
     let domain_inv = field.domain(&generator_inv, domain_size);
 
     let out = Self::eval_fft_inv(&x3, &domain_inv, field);
@@ -843,8 +842,8 @@ mod tests {
 
   #[test]
   fn should_add_polynomials() {
-    let p = BigInt::from(101);
-    let g = BigInt::from(0);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     // 2x^2 - 20
@@ -874,8 +873,8 @@ mod tests {
 
   #[test]
   fn should_subtract_polynomials() {
-    let p = BigInt::from(101);
-    let g = BigInt::from(0);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     // 2x^2 - 20
@@ -907,8 +906,8 @@ mod tests {
 
   #[test]
   fn should_multiply_polynomials() {
-    let p = BigInt::from(101);
-    let g = BigInt::from(0);
+    let p = BigInt::from(3221225473_u32);
+    let g = BigInt::from(5);
     let f = Rc::new(Field::new(p, g));
 
     // 2x^2 - 20

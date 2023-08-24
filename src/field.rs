@@ -12,17 +12,39 @@ pub struct Field {
   // generator, size size keyed to contents
   group_cache: RwLock<HashMap<(BigInt, u32), Vec<BigInt>>>,
   // group size, offset keyed to contents
-  coset_cache: RwLock<HashMap<(u32, BigInt), Vec<BigInt>>>
+  coset_cache: RwLock<HashMap<(u32, BigInt), Vec<BigInt>>>,
+  generator_cache: HashMap<u32, (BigInt, BigInt)>
 }
 
 impl Field {
   pub fn new(p: BigInt, g: BigInt) -> Field {
-    Field {
+    let mut f = Field {
       p,
       g,
       group_cache: RwLock::new(HashMap::new()),
-      coset_cache: RwLock::new(HashMap::new())
+      coset_cache: RwLock::new(HashMap::new()),
+      generator_cache: HashMap::new()
+    };
+    if f.p.bits() <= 32 {
+      // we're likely in the 101 field in tests
+      // don't build the domain cache
+      return f;
     }
+
+    // build a cache of generators and inverted generators
+    let mut start = 2;
+    let mut sizes: Vec<u32> = Vec::new();
+    let mut generators: Vec<BigInt> = Vec::new();
+    for _ in 0..31 {
+      generators.push(f.generator(&BigInt::from(start)));
+      sizes.push(start);
+      start *= 2;
+    }
+    let generators_inv = f.inv_batch(&generators);
+    for i in 0..(generators.len()) {
+      f.generator_cache.insert(sizes[i], (generators[i].clone(), generators_inv[i].clone()));
+    }
+    f
   }
 
   pub fn bigint_to_u32(v: &BigInt) -> u32 {
@@ -102,6 +124,15 @@ impl Field {
   // exponent should always be >= 0
   pub fn exp(&self, v: &BigInt, e: &BigInt) -> BigInt {
     self.modd(v).modpow(e, &self.p)
+  }
+
+  pub fn generator_cache(&self, size: &u32) -> (BigInt, BigInt) {
+    if let Some(v) = self.generator_cache.get(size) {
+      return v.clone();
+    }
+    let g = self.generator(&BigInt::from(size.clone()));
+    let g_inv = self.inv(&g);
+    return (g, g_inv);
   }
 
   pub fn generator(&self, size: &BigInt) -> BigInt {

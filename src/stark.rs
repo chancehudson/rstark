@@ -41,8 +41,8 @@ impl Stark {
     let trace_bits = BigInt::from((original_trace_len + randomizer_count)*transition_constraints_degree).bits();
     let omicron_domain_len = 2_u32.pow(u32::try_from(trace_bits).unwrap());
     let fri_domain_len = omicron_domain_len * expansion_factor;
-    let omega = field.generator(&BigInt::from(fri_domain_len));
-    let omicron = field.generator(&BigInt::from(omicron_domain_len));
+    let (omega, _) = field.generator_cache(&fri_domain_len);
+    let (omicron, _) = field.generator_cache(&omicron_domain_len);
 
     let fri = Fri::new(&FriOptions {
       offset: offset.clone(),
