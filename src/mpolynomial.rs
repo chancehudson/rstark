@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use num_bigint::{BigInt, BigUint, ToBigInt};
+
 use crate::field::Field;
 use std::rc::Rc;
 use crate::polynomial::Polynomial;
@@ -139,7 +139,7 @@ impl MPolynomial {
   pub fn eval_symbolic(&self, polys: &Vec<Polynomial>) -> Polynomial {
     let mut out = Polynomial::new(&self.field);
     let mut degrees: Vec<u32> = Vec::new();
-    for (exps, coef) in self.exps() {
+    for (exps, _coef) in self.exps() {
       for (i, e) in exps.iter().enumerate() {
         if i >= degrees.len() {
           degrees.resize(i+1, 0);

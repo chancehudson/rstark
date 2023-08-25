@@ -1,4 +1,4 @@
-use num_bigint::{BigInt};
+
 use crate::field::Field;
 use std::rc::Rc;
 
@@ -305,8 +305,8 @@ impl Polynomial {
     Self::eval_fft_(coefs, domain, field, slice_len*2, offset + slice_len, right_dest, right_dest + out_size/4, out);
 
     for i in 0..(out_size/2) {
-      let mut left_out;
-      let mut right_out;
+      let left_out;
+      let right_out;
       {
         let x = &(&*out)[left_dest + i];
         let y = &(&*out)[right_dest + i];

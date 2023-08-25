@@ -10,7 +10,7 @@ use crate::field::Field;
 use crate::stark::Stark;
 use crate::mpolynomial::MPolynomial;
 use std::rc::Rc;
-use num_bigint::{BigInt, BigUint, ToBigInt};
+
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 

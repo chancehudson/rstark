@@ -1,9 +1,12 @@
-use num_bigint::{BigInt, Sign};
-use num_integer::Integer;
+#[cfg(test)]
+use num_bigint::BigInt;
+
 use rand::Rng;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
+
+static upper: u128 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF << 64_u128;
 
 #[derive(Serialize, Deserialize)]
 pub struct Field {
@@ -82,46 +85,42 @@ impl Field {
     return r + (u128::MAX - self.p) + 1;
   }
 
+
   // multiply two numbers modulo self.p
   pub fn mul(&self, v1: &u128, v2: &u128) -> u128 {
-    if ((v1|v2) & (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF << 64)) == 0 {
+    if ((v1|v2) & upper) == 0 {
       return (v1 * v2) % self.p;
     }
 
-    let mut a = v1.clone();
-    let mut b = v2.clone();
+    let mut a;
+    let mut b;
+    if v2 < v1 {
+      a = v2.clone();
+      b = v1.clone();
+    } else {
+      a = v1.clone();
+      b = v2.clone();
+    }
+    let mut r = 0_u128;
 
-    let mut d = 0_u128;
-    let mp2 = self.p.clone() >> 1;
-    if a >= self.p {
-      a %= self.p;
-    }
-    if b >= self.p {
-      b %= self.p;
-    }
-    for _ in 0..128 {
-      d = if d > mp2 {
-        d.wrapping_mul(2).wrapping_sub(self.p)
-      } else {
-        d << 1
-      };
-      let z = if (a & 0x80000000000000000000000000000000) == 0 {
-        0
-      } else {
-        b
-      };
-      if d >= self.p - z {
-        // d -= self.p;
-        d = d.wrapping_sub(self.p).wrapping_add(z);
-      } else {
-        d += z;
+    while a != 0 {
+      if a & 1 == 1 {
+        if b >= self.p - r {
+          r -= self.p - b;
+        } else {
+          r += b;
+        }
       }
-
-      a <<= 1;
+      a >>= 1;
+      if b >= self.p - b {
+        b -= self.p - b;
+      } else {
+        b += b;
+      }
     }
 
-    d
-  }
+    r
+}
 
   pub fn sub(&self, v1: &u128, v2: &u128) -> u128 {
     if v1 >= v2 {
