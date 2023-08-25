@@ -11,25 +11,25 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 pub struct Stark {
-  offset: BigInt,
+  offset: u128,
   field: Rc<Field>,
   randomizer_count: u32,
   register_count: u32,
   original_trace_len: u32,
   randomized_trace_len: u32,
   expansion_factor: u32,
-  omega: BigInt,
-  omega_domain: Vec<BigInt>,
+  omega: u128,
+  omega_domain: Vec<u128>,
   fri_domain_len: u32,
-  omicron: BigInt,
+  omicron: u128,
   omicron_domain_len: u32,
-  omicron_domain: Vec<BigInt>,
+  omicron_domain: Vec<u128>,
   fri: Fri
 }
 
 impl Stark {
   pub fn new(
-    offset: &BigInt,
+    offset: &u128,
     field: &Rc<Field>,
     register_count: u32,
     original_trace_len: u32,
@@ -38,7 +38,7 @@ impl Stark {
     transition_constraints_degree: u32
   ) -> Stark {
     let randomizer_count = 4 * colinearity_test_count;
-    let trace_bits = BigInt::from((original_trace_len + randomizer_count)*transition_constraints_degree).bits();
+    let trace_bits = ((original_trace_len + randomizer_count)*transition_constraints_degree).ilog2();
     let omicron_domain_len = 2_u32.pow(u32::try_from(trace_bits).unwrap());
     let fri_domain_len = omicron_domain_len * expansion_factor;
     let (omega, _) = field.generator_cache(&fri_domain_len);
@@ -116,10 +116,10 @@ impl Stark {
     Polynomial::zeroifier_fft_slice(points, &self.field)
   }
 
-  fn boundary_zeroifiers(&self, boundary: &Vec<(u32, u32, BigInt)>) -> Vec<Polynomial> {
+  fn boundary_zeroifiers(&self, boundary: &Vec<(u32, u32, u128)>) -> Vec<Polynomial> {
     let mut zeroifiers: Vec<Polynomial> = Vec::new();
     for i in 0..self.register_count {
-      let points: Vec<BigInt> = boundary
+      let points: Vec<u128> = boundary
         .iter()
         .filter(|(_c, r, _v)| r == &i)
         .map(|(c, _r, _v)| self.omicron_domain[usize::try_from(c.clone()).unwrap()].clone())
@@ -135,17 +135,17 @@ impl Stark {
     zeroifiers
   }
 
-  fn boundary_interpolants(&self, boundary: &Vec<(u32, u32, BigInt)>) -> Vec<Polynomial> {
+  fn boundary_interpolants(&self, boundary: &Vec<(u32, u32, u128)>) -> Vec<Polynomial> {
     let mut interpolants: Vec<Polynomial> = Vec::new();
     for i in 0..self.register_count {
-      let mut domain: Vec<BigInt> = Vec::new();
-      let mut values: Vec<BigInt> = Vec::new();
+      let mut domain: Vec<u128> = Vec::new();
+      let mut values: Vec<u128> = Vec::new();
       for (_, (c, r, v)) in boundary.iter().enumerate() {
         if r != &u32::try_from(i).unwrap() {
           continue;
         }
         domain.push(self.omicron_domain[usize::try_from(c.clone()).unwrap()].clone());
-        // domain.push(self.field.exp(&self.omicron, &BigInt::from(c.clone())));
+        // domain.push(self.field.exp(&self.omicron, &u128::from(c.clone())));
         values.push(v.clone());
       }
       // interpolants.push(Polynomial::lagrange(&domain, &values, &self.field));
@@ -154,41 +154,41 @@ impl Stark {
     interpolants
   }
 
-  fn boundary_quotient_degree_bounds(&self, random_trace_len: u32, boundary: &Vec<(u32, u32, BigInt)>) -> Vec<u32> {
+  fn boundary_quotient_degree_bounds(&self, random_trace_len: u32, boundary: &Vec<(u32, u32, u128)>) -> Vec<u32> {
     let random_trace_degree = random_trace_len - 1;
     self.boundary_zeroifiers(boundary).iter().map(|p| random_trace_degree - u32::try_from(p.degree()).unwrap()).collect()
   }
 
-  fn sample_weights(&self, count: u32, randomness: &BigInt) -> Vec<BigInt> {
-    let mut out: Vec<BigInt> = Vec::new();
+  fn sample_weights(&self, count: u32, randomness: &[u8; 32]) -> Vec<u128> {
+    let mut out: Vec<u128> = Vec::new();
     for i in 0..count {
       let mut hasher = blake3::Hasher::new();
-      hasher.update(&randomness.to_bytes_le().1);
-      hasher.update(&BigUint::from(i).to_bytes_le());
-      let v = BigInt::from_bytes_le(Sign::Plus, hasher.finalize().as_bytes());
-      out.push(self.field.modd(&v));
+      hasher.update(randomness);
+      hasher.update(&i.to_le_bytes());
+      let v = self.field.sample_bytes(hasher.finalize().as_bytes());
+      out.push(v);
     }
     out
   }
 
-  pub fn prove(&self, trace: &Vec<Vec<BigInt>>, transition_constraints: &Vec<MPolynomial>, boundary: &Vec<(u32, u32, BigInt)>) -> String {
+  pub fn prove(&self, trace: &Vec<Vec<u128>>, transition_constraints: &Vec<MPolynomial>, boundary: &Vec<(u32, u32, u128)>) -> String {
     let mut trace = trace.clone();
     let mut channel = Channel::new();
 
     for _ in 0..self.randomizer_count {
-      let mut r: Vec<BigInt> = Vec::new();
+      let mut r: Vec<u128> = Vec::new();
       for _ in 0..self.register_count {
         r.push(self.field.random());
       }
       trace.push(r);
     }
 
-    let mut trace_domain: Vec<BigInt> = vec!(BigInt::from(0); trace.len());
+    let mut trace_domain: Vec<u128> = vec!(0_u128; trace.len());
     trace_domain.clone_from_slice(&self.omicron_domain[0..trace.len()]);
 
-    let mut y_vals: Vec<Vec<BigInt>> = Vec::new();
+    let mut y_vals: Vec<Vec<u128>> = Vec::new();
     for i in 0..self.register_count {
-      let trace_vals: Vec<BigInt> = trace
+      let trace_vals: Vec<u128> = trace
         .iter()
         .map(|registers| registers[usize::try_from(i).unwrap()].clone())
         .collect();
@@ -208,21 +208,18 @@ impl Stark {
       // boundary_quotients.push(q.safe_div(zeroifier));
     }
 
-    let mut boundary_quotient_codewords: Vec<Vec<BigUint>> = Vec::new();
+    let mut boundary_quotient_codewords: Vec<Vec<u128>> = Vec::new();
     let mut boundary_quotient_trees: Vec<Tree> = Vec::new();
     for i in 0..usize::try_from(self.register_count).unwrap() {
-      let codewords: Vec<BigUint> = boundary_quotients[i].eval_batch_coset(&self.fri.offset, self.fri_domain_len)
-        .iter()
-        .map(|v| v.to_biguint().unwrap())
-        .collect();
-      let tree = Tree::build(&codewords);
-      channel.push_single(&tree.root());
+      let codewords: Vec<u128> = boundary_quotients[i].eval_batch_coset(&self.fri.offset, self.fri_domain_len);
+      let tree = Tree::build(&Tree::u128s_to_bytes(&codewords));
+      channel.push_root(&tree.root());
       boundary_quotient_codewords.push(codewords);
       boundary_quotient_trees.push(tree);
     }
 
     let mut p_x = Polynomial::new(&self.field);
-    p_x.term(&BigInt::from(1), 1);
+    p_x.term(&1, 1);
     let p_x = p_x;
 
     let mut point: Vec<Polynomial> = Vec::new();
@@ -247,16 +244,13 @@ impl Stark {
       randomizer_poly.term(&self.field.random(), i);
     }
 
-    let randomizer_codeword = randomizer_poly.eval_batch_coset(&self.fri.offset, self.fri_domain_len)
-      .iter()
-      .map(|v| v.to_biguint().unwrap())
-      .collect();
-    let randomizer_tree = Tree::build(&randomizer_codeword);
+    let randomizer_codeword = randomizer_poly.eval_batch_coset(&self.fri.offset, self.fri_domain_len);
+    let randomizer_tree = Tree::build_elements(&randomizer_codeword);
     let randomizer_root = randomizer_tree.root();
-    channel.push_single(&randomizer_root);
+    channel.push_root(&randomizer_root);
 
     let count = u32::try_from(1 + 2 * transition_quotients.len() + 2 * boundary_quotients.len()).unwrap();
-    let weights = self.sample_weights(count, &channel.prover_hash().to_bigint().unwrap());
+    let weights = self.sample_weights(count, &channel.prover_hash());
 
     let bounds = self.transition_quotient_degree_bounds(&transition_constraints);
     for i in 0..bounds.len() {
@@ -289,10 +283,7 @@ impl Stark {
       combination.add(&w_poly);
     }
 
-    let combined_codeword = combination.eval_batch_coset(&self.fri.offset, self.fri_domain_len)
-      .iter()
-      .map(|v| v.to_biguint().unwrap())
-      .collect();
+    let combined_codeword = combination.eval_batch_coset(&self.fri.offset, self.fri_domain_len);
     let mut indices = self.fri.prove(&combined_codeword, & mut channel);
     indices.sort_by(|a, b| {
       if a > b {
@@ -315,20 +306,20 @@ impl Stark {
       for index in quadrupled_indices.clone() {
         channel.push_single(&bqc[usize::try_from(index).unwrap()]);
         let (path, _) = boundary_quotient_trees[i].open(index);
-        channel.push(&path);
+        channel.push_path(&path);
       }
     }
 
     for index in quadrupled_indices {
       channel.push_single(&randomizer_codeword[usize::try_from(index).unwrap()]);
       let (path, _) = randomizer_tree.open(index);
-      channel.push(&path);
+      channel.push_path(&path);
     }
 
     channel.serialize()
   }
 
-  pub fn verify(&self, proof: &String, transition_constraints: &Vec<MPolynomial>, boundary: &Vec<(u32, u32, BigInt)>) -> bool {
+  pub fn verify(&self, proof: &String, transition_constraints: &Vec<MPolynomial>, boundary: &Vec<(u32, u32, u128)>) -> bool {
     let mut channel = Channel::deserialize(proof);
     let mut original_trace_len = 0;
     for (c, _, _) in boundary {
@@ -340,15 +331,15 @@ impl Stark {
 
     let randomized_trace_len = original_trace_len + self.randomizer_count;
 
-    let mut boundary_quotient_roots: Vec<BigUint> = Vec::new();
+    let mut boundary_quotient_roots: Vec<[u8; 32]> = Vec::new();
     for _ in 0..self.register_count {
-      boundary_quotient_roots.push(channel.pull().data[0].clone());
+      boundary_quotient_roots.push(channel.pull_root().clone());
     }
 
-    let randomizer_root = channel.pull().data[0].clone();
+    let randomizer_root = channel.pull_root().clone();
 
     let count = u32::try_from(1 + 2 * transition_constraints.len() + 2 * usize::try_from(self.register_count).unwrap()).unwrap();
-    let weights = self.sample_weights(count, &channel.verifier_hash().to_bigint().unwrap());
+    let weights = self.sample_weights(count, &channel.verifier_hash());
 
     let mut polynomial_vals = self.fri.verify(& mut channel);
     polynomial_vals.sort_by(|(ax, _ay), (bx, _by)| {
@@ -359,7 +350,7 @@ impl Stark {
     });
 
     let indices: Vec<u32> = polynomial_vals.iter().map(|(x, _y)| x.clone()).collect();
-    let values: Vec<BigUint> = polynomial_vals.iter().map(|(_x, y)| y.clone()).collect();
+    let values: Vec<u128> = polynomial_vals.iter().map(|(_x, y)| y.clone()).collect();
 
     let mut duplicated_indices = indices.clone();
     duplicated_indices.extend(indices.iter().map(|v| (v + self.expansion_factor) % self.fri_domain_len).collect::<Vec<u32>>());
@@ -370,27 +361,27 @@ impl Stark {
       return Ordering::Less;
     });
 
-    let mut leaves: Vec<HashMap<u32, BigUint>> = Vec::new();
+    let mut leaves: Vec<HashMap<u32, u128>> = Vec::new();
     for i in 0..self.register_count {
-      let mut leaf_map: HashMap<u32, BigUint> = HashMap::new();
+      let mut leaf_map: HashMap<u32, u128> = HashMap::new();
       for j in duplicated_indices.clone() {
-        leaf_map.insert(j, channel.pull().data[0].clone());
-        let path = &channel.pull().data;
+        leaf_map.insert(j, channel.pull_u128s()[0].clone());
+        let path = &channel.pull_path();
         Tree::verify(
           &boundary_quotient_roots[usize::try_from(i).unwrap()],
           j,
           path,
-          leaf_map.get(&j).unwrap()
+          &Tree::u128_to_bytes(&leaf_map.get(&j).unwrap())
         );
       }
       leaves.push(leaf_map);
     }
 
-    let mut randomizer_map: HashMap<u32, BigUint> = HashMap::new();
+    let mut randomizer_map: HashMap<u32, u128> = HashMap::new();
     for i in duplicated_indices {
-      let val = channel.pull().data[0].clone();
-      let path = &channel.pull().data;
-      Tree::verify(&randomizer_root, i, path, &val);
+      let val = channel.pull_u128s()[0].clone();
+      let path = &channel.pull_path();
+      Tree::verify(&randomizer_root, i, path, &Tree::u128_to_bytes(&val));
       randomizer_map.insert(i, val);
     }
 
@@ -406,53 +397,53 @@ impl Stark {
       let domain_current_index = self.field.mul(&self.field.g(), &self.omega_domain[usize::try_from(current_index).unwrap()]);
       let next_index = (current_index + self.expansion_factor) % self.fri_domain_len;
       let domain_next_index = self.field.mul(&self.field.g(), &self.omega_domain[usize::try_from(next_index).unwrap()]);
-      let mut current_trace = vec!(BigInt::from(0); usize::try_from(self.register_count).unwrap());
-      let mut next_trace = vec!(BigInt::from(0); usize::try_from(self.register_count).unwrap());
+      let mut current_trace = vec!(0_u128; usize::try_from(self.register_count).unwrap());
+      let mut next_trace = vec!(0_u128; usize::try_from(self.register_count).unwrap());
 
       for j in 0..usize::try_from(self.register_count).unwrap() {
         let zeroifier = &boundary_zeroifiers[j];
         let interpolant = &boundary_interpolants[j];
 
         current_trace[j] = self.field.add(
-          &self.field.mul(&leaves[j].get(&current_index).unwrap().to_bigint().unwrap(), &zeroifier.eval(&domain_current_index)),
+          &self.field.mul(&leaves[j].get(&current_index).unwrap(), &zeroifier.eval(&domain_current_index)),
           &interpolant.eval(&domain_current_index)
         );
         next_trace[j] = self.field.add(
-          &self.field.mul(&leaves[j].get(&next_index).unwrap().to_bigint().unwrap(), &zeroifier.eval(&domain_next_index)),
+          &self.field.mul(&leaves[j].get(&next_index).unwrap(), &zeroifier.eval(&domain_next_index)),
           &interpolant.eval(&domain_next_index)
         );
       }
 
-      let mut point: Vec<BigInt> = Vec::new();
+      let mut point: Vec<u128> = Vec::new();
       point.push(domain_current_index.clone());
       point.extend(current_trace.clone());
       point.extend(next_trace.clone());
 
-      let transition_constraint_values: Vec<BigInt> = transition_constraints.iter().map(|c| c.eval(&point)).collect();
+      let transition_constraint_values: Vec<u128> = transition_constraints.iter().map(|c| c.eval(&point)).collect();
       let transition_zeroifier_eval_inv = self.field.inv(&transition_zeroifier.eval(&domain_current_index));
 
-      let mut terms: Vec<BigInt> = Vec::new();
-      terms.push(randomizer_map.get(&current_index).unwrap().to_bigint().unwrap());
+      let mut terms: Vec<u128> = Vec::new();
+      terms.push(randomizer_map.get(&current_index).unwrap().clone());
       for j in 0..transition_constraint_values.len() {
         let tcv = &transition_constraint_values[j];
         let q = self.field.mul(tcv, &transition_zeroifier_eval_inv);
         terms.push(q.clone());
         let shift = transition_constraints_max_degree - transition_quotient_degree_bounds[j];
-        terms.push(self.field.mul(&q, &self.field.exp(&domain_current_index, &BigInt::from(shift))));
+        terms.push(self.field.mul(&q, &self.field.exp(&domain_current_index, &u128::try_from(shift).unwrap())));
       }
 
       for j in 0..usize::try_from(self.register_count).unwrap() {
-        let bqv = leaves[j].get(&current_index).unwrap().to_bigint().unwrap();
+        let bqv = leaves[j].get(&current_index).unwrap();
         terms.push(bqv.clone());
         let shift = transition_constraints_max_degree - boundary_quotient_degree_bounds[j];
-        terms.push(self.field.mul(&bqv, &self.field.exp(&domain_current_index, &BigInt::from(shift))));
+        terms.push(self.field.mul(&bqv, &self.field.exp(&domain_current_index, &u128::try_from(shift).unwrap())));
       }
 
-      let mut combination = BigInt::from(0);
+      let mut combination = 0_u128;
       for j in 0..terms.len() {
         combination = self.field.add(&combination, &self.field.mul(&terms[j], &weights[j]));
       }
-      if combination.to_biguint().unwrap() != values[i] {
+      if combination != values[i] {
         panic!("invalid combination value");
       }
     }
@@ -467,8 +458,8 @@ mod tests {
 
   #[test]
   fn should_make_verify_stark_proof() {
-    let p = BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119);
-    let g = BigInt::from(85408008396924667383611388730472331217_u128);
+    let p = 1 + 407 * 2_u128.pow(119);
+    let g = 85408008396924667383611388730472331217_u128;
     let f = Rc::new(Field::new(p, g.clone()));
 
     let sequence_len = 40;
@@ -482,9 +473,9 @@ mod tests {
       2
     );
 
-    let mut trace: Vec<Vec<BigInt>> = Vec::new();
-    trace.push(vec!(BigInt::from(2), BigInt::from(3)));
-    trace.push(vec!(BigInt::from(4), BigInt::from(9)));
+    let mut trace: Vec<Vec<u128>> = Vec::new();
+    trace.push(vec!(2_u128, 3));
+    trace.push(vec!(4_u128, 9));
     while trace.len() < sequence_len.try_into().unwrap() {
       let e1 = &trace[trace.len() - 1][0];
       let e2 = &trace[trace.len() - 1][1];
@@ -492,8 +483,8 @@ mod tests {
     }
 
     let boundary_constraints = vec!(
-      (0, 0, BigInt::from(2)),
-      (0, 1, BigInt::from(3)),
+      (0, 0, 2_u128),
+      (0, 1, 3),
       (sequence_len-1, 0, trace[trace.len()-1][0].clone()),
       (sequence_len-1, 1, trace[trace.len()-1][1].clone())
     );

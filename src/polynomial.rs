@@ -235,7 +235,7 @@ impl Polynomial {
   fn eval_batch_fast_(&self,
     vals: &[u128],
   ) -> Vec<u128> {
-    if vals.len() == 0{
+    if vals.len() == 0 {
       return Vec::new();
     }
     if vals.len() == 1 {
@@ -521,8 +521,11 @@ impl Polynomial {
     let left_offset = right_zeroifier.eval_batch_fast_slice(&x_vals[0..half]);
     let right_offset = left_zeroifier.eval_batch_fast_slice(&x_vals[half..]);
 
-    let left_targets = y_vals[0..half].iter().enumerate().map(|(i, v)| field.div(v, &left_offset[i])).collect::<Vec<u128>>();
-    let right_targets = y_vals[half..].iter().enumerate().map(|(i, v)| field.div(v, &right_offset[i])).collect::<Vec<u128>>();
+    let left_offset_invs = field.inv_batch(&left_offset);
+    let right_offset_invs = field.inv_batch(&right_offset);
+
+    let left_targets = y_vals[0..half].iter().enumerate().map(|(i, v)| field.mul(v, &left_offset_invs[i])).collect::<Vec<u128>>();
+    let right_targets = y_vals[half..].iter().enumerate().map(|(i, v)| field.mul(v, &right_offset_invs[i])).collect::<Vec<u128>>();
 
     let mut left_interpolant = Self::interpolate_fft_slice(&x_vals[0..half], &left_targets[0..], field);
     let mut right_interpolant = Self::interpolate_fft_slice(&x_vals[half..], &right_targets[0..], field);

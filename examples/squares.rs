@@ -5,8 +5,8 @@ use std::rc::Rc;
 use num_bigint::{BigInt};
 
 fn main() {
-  let p = BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119);
-  let g = BigInt::from(85408008396924667383611388730472331217_u128);
+  let p = 1 + 407 * 2_u128.pow(119);
+  let g = 85408008396924667383611388730472331217_u128;
   let f = Rc::new(Field::new(p, g.clone()));
 
   let register_count = 40;
@@ -21,19 +21,19 @@ fn main() {
     2
   );
 
-  let first_step = (0..register_count).map(|v| 2 + BigInt::from(v)).collect();
+  let first_step = (0..register_count).map(|v| 2_u128 + v as u128).collect();
 
-  let mut trace: Vec<Vec<BigInt>> = Vec::new();
+  let mut trace: Vec<Vec<u128>> = Vec::new();
   trace.push(first_step);
   while trace.len() < sequence_len.try_into().unwrap() {
     let last = &trace[trace.len() - 1];
-    let mut next: Vec<BigInt> = Vec::new();
+    let mut next: Vec<u128> = Vec::new();
     for i in last {
       next.push(f.mul(&i, &i));
     }
     trace.push(next);
   }
-  let mut boundary_constraints: Vec<(u32, u32, BigInt)> = Vec::new();
+  let mut boundary_constraints: Vec<(u32, u32, u128)> = Vec::new();
   for (i, v) in trace[0].iter().enumerate() {
     boundary_constraints.push((0, i as u32, v.clone()));
   }

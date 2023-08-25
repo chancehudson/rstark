@@ -209,10 +209,9 @@ impl Fri {
       return self.field.mul(&last_offset, &self.field.exp(&last_omega, &u128::try_from(index).unwrap()));
     }).collect();
 
-    let poly = Polynomial::lagrange(&last_domain, &last_codeword, &self.field);
+    let poly = Polynomial::interpolate_fft(&last_domain, &last_codeword, &self.field);
     for i in 0..last_domain.len() {
       if poly.eval(&last_domain[i]) != last_codeword[i] {
-        println!("{} {}", poly.eval(&last_domain[i]), last_codeword[i]);
         panic!("interpolated polynomial is incorrect");
       }
     }

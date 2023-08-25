@@ -20,6 +20,10 @@ impl Tree {
     &self.levels[0]
   }
 
+  pub fn build_elements(leaves: &Vec<u128>) -> Tree {
+    Self::build(&Self::u128s_to_bytes(leaves))
+  }
+
   pub fn build(leaves: &Vec<[u8; 32]>) -> Tree {
     let mut levels: Vec<Vec<[u8; 32]>> = Vec::new();
     levels.push(leaves.clone());

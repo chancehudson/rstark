@@ -5,8 +5,8 @@ use std::rc::Rc;
 use num_bigint::{BigInt};
 
 fn main() {
-  let p = BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119);
-  let g = BigInt::from(85408008396924667383611388730472331217_u128);
+  let p = 1 + 407 * 2_u128.pow(119);
+  let g = 85408008396924667383611388730472331217_u128;
   let f = Rc::new(Field::new(p, g.clone()));
 
   let register_count = 3;
@@ -31,13 +31,13 @@ fn main() {
   // if a and b are equal then a-b=0 and no value z
   // should exist such that 0 = 1 - z*0
 
-  let mut trace: Vec<Vec<BigInt>> = Vec::new();
+  let mut trace: Vec<Vec<u128>> = Vec::new();
   for _ in 0..2 {
     let a = f.random();
     let b = f.random();
     trace.push(vec!(a.clone(), b.clone(), f.inv(&f.sub(&a, &b))));
   }
-  let mut boundary_constraints: Vec<(u32, u32, BigInt)> = Vec::new();
+  let mut boundary_constraints: Vec<(u32, u32, u128)> = Vec::new();
   for (i, v) in trace.iter().enumerate() {
     boundary_constraints.push((i as u32, 0, v[0].clone()));
   }
@@ -52,7 +52,7 @@ fn main() {
   let mut transition_constraints: Vec<MPolynomial> = Vec::new();
   {
     let mut one = MPolynomial::new(&f);
-    one.term(&BigInt::from(1), &vec!(0));
+    one.term(&1, &vec!(0));
     one.sub(&prev_state[2].clone().mul(&prev_state[0].clone().sub(&prev_state[1])));
     transition_constraints.push(one);
   }
