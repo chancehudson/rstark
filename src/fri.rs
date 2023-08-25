@@ -211,7 +211,6 @@ impl Fri {
 
     let poly = Polynomial::lagrange(&last_domain, &last_codeword, &self.field);
     for i in 0..last_domain.len() {
-      println!("{}", i);
       if poly.eval(&last_domain[i]) != last_codeword[i] {
         println!("{} {}", poly.eval(&last_domain[i]), last_codeword[i]);
         panic!("interpolated polynomial is incorrect");
@@ -286,16 +285,18 @@ mod tests {
     let mut channel = Channel::new();
     let p = 1 + 407 * 2_u128.pow(119);
     let g = 85408008396924667383611388730472331217_u128;
+    // let p = 3221225473_u128;
+    // let g = 5_u128;
     let f = Rc::new(Field::new(p, g.clone()));
-    let domain_size: u32 = 8192;
+    let domain_size: u32 = 64;
     let domain_g = f.generator(&domain_size);
 
     let fri = Fri::new(&FriOptions {
       offset: g.clone(),
       omega: domain_g.clone(),
       domain_len: domain_size,
-      expansion_factor: 2,
-      colinearity_test_count: 10
+      expansion_factor: 4,
+      colinearity_test_count: 4
     }, &f);
 
     let mut poly = Polynomial::new(&f);

@@ -109,6 +109,9 @@ impl Polynomial {
   // with a coefficient of 1
   // e.g. multiplying by x^5
   pub fn shift_and_clone(&self, degree: u32) -> Self {
+    if degree == 0 {
+      return self.clone();
+    }
     let degree_usize = usize::try_from(degree).unwrap();
     let mut shifted_coefs = vec!(0_u128; degree_usize);
     shifted_coefs.extend(self.coefs.clone());
@@ -455,6 +458,7 @@ impl Polynomial {
       t.mul_scalar(&new_coef);
       inter.sub(&t);
     }
+    inter.trim();
     (q, inter)
   }
 
@@ -792,6 +796,29 @@ mod tests {
 
     assert!(q.is_equal(&expected_q));
     assert!(r.is_equal(&expected_r));
+  }
+
+  #[test]
+  fn should_divide_random_polynomials() {
+    let p = 3221225473_u128;
+    let g = 5_u128;
+    let f = Rc::new(Field::new(p, g));
+
+    let mut poly1 = Polynomial::new(&f);
+    for i in 0..50 {
+      poly1.term(&f.random(), i);
+    }
+
+    let mut poly2 = Polynomial::new(&f);
+    for i in 0..50 {
+      poly2.term(&f.random(), i);
+    }
+
+    let (q, r) = poly1.div(&poly2);
+    let mut out = q.clone();
+    out.mul(&poly2);
+    out.add(&r);
+    assert!(poly1.is_equal(&out));
   }
 
   #[test]

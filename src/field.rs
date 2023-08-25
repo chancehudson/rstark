@@ -79,7 +79,7 @@ impl Field {
     if !overflowed {
       return r % self.p;
     }
-    return r + (u128::MAX - self.p);
+    return r + (u128::MAX - self.p) + 1;
   }
 
   // multiply two numbers modulo self.p
@@ -385,7 +385,7 @@ mod tests {
     let f = Field::new(p, f_g);
 
     for i in 1..99 {
-      let v = i;
+      let v = f.random();
       let inv = f.inv(&v);
       assert_eq!(f.mul(&inv, &v), Field::one());
     }
