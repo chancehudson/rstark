@@ -6,9 +6,9 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[[example]]
-name = "squares"
-crate-type = ["bin"]
+#[[example]]
+#name = "squares"
+#crate-type = ["bin"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
