@@ -74,36 +74,29 @@ impl Stark {
     &self.field
   }
 
-  fn transition_degree_bounds(&self, constraints: &Vec<MPolynomial>) -> Vec<u32> {
+  fn transition_degree_bounds(&self, constraint: &MPolynomial) -> u32 {
     let degree: u32 = self.original_trace_len + self.randomizer_count - 1;
     let mut point_degrees: Vec<u32> = vec!(degree; usize::try_from(1+2*self.register_count).unwrap());
     point_degrees[0] = 1;
-    let mut out: Vec<u32> = Vec::new();
-    for t in constraints {
-      let mut largest = 0;
-      for (exps, _) in t.exps() {
-        let mut sum = 0;
-        for i in 0..point_degrees.len() {
-          sum += exps.get(i).unwrap_or(&0) * point_degrees[i];
-        }
-        if sum > largest {
-          largest = sum;
-        }
+    let mut out: u32 = 0;
+    for (exps, _) in constraint.exps() {
+      let mut sum = 0;
+      for i in 0..point_degrees.len() {
+        sum += exps.get(i).unwrap_or(&0) * point_degrees[i];
       }
-      out.push(largest);
+      if sum > out {
+        out = sum;
+      }
     }
     out
   }
 
-  fn transition_quotient_degree_bounds(&self, constraints: &Vec<MPolynomial>) -> Vec<u32> {
-    self.transition_degree_bounds(constraints).iter().map(|v| v - (self.original_trace_len - 1)).collect()
+  fn transition_quotient_degree_bound(&self, constraint: &MPolynomial) -> u32 {
+    self.transition_degree_bounds(constraint) - (self.original_trace_len - 1)
   }
 
-  fn max_degree(&self, constraints: &Vec<MPolynomial>) -> u32 {
-    let mut degree: u32 = 0;
-    for v in self.transition_quotient_degree_bounds(constraints) {
-      degree = std::cmp::max(v, degree);
-    }
+  fn max_degree(&self, constraint: &MPolynomial) -> u32 {
+    let mut degree: u32 = self.transition_quotient_degree_bound(constraint);
     let mut max_degree = degree.ilog2();
     if 2_u32.pow(max_degree) != degree {
       max_degree += 1;
@@ -234,15 +227,27 @@ impl Stark {
       pp
     }));
 
-    let transition_polynomials: Vec<Polynomial> = transition_constraints.iter().map(|p| p.eval_symbolic(&point)).collect();
+    let mut transition_weights: Vec<BigInt> = Vec::new();
+    {
+      let coef = self.field.sample(&channel.prover_hash().to_bigint().unwrap());
+      transition_weights.push(coef.clone());
+      for i in 1..transition_constraints.len() {
+        transition_weights.push(self.field.mul(&transition_weights[i-1], &coef));
+      }
+    }
+
+    // combine all transition constraints using a random linear combination
+    let mut single_transition_constraint = MPolynomial::new(&self.field);
+    for (i, t) in transition_constraints.iter().enumerate() {
+      single_transition_constraint.add(t.clone().mul_scalar(&transition_weights[i]));
+    }
+
+    let transition_polynomial: Polynomial = single_transition_constraint.eval_symbolic(&point);
     let transition_zeroifier: Polynomial = self.transition_zeroifier();
-    let transition_quotients: Vec<Polynomial> = transition_polynomials.iter().map(|p| {
-      // p.safe_div(&transition_zeroifier)
-      Polynomial::div_coset(&p, &transition_zeroifier, &self.offset, &self.omega, self.fri_domain_len, &self.field)
-    }).collect();
+    let transition_quotient: Polynomial = Polynomial::div_coset(&transition_polynomial, &transition_zeroifier, &self.offset, &self.omega, self.fri_domain_len, &self.field);
 
     let mut randomizer_poly = Polynomial::new(&self.field);
-    let transition_max_degree = self.max_degree(&transition_constraints);
+    let transition_max_degree = self.max_degree(&single_transition_constraint);
     for i in 0..(transition_max_degree+1) {
       randomizer_poly.term(&self.field.random(), i);
     }
@@ -255,26 +260,24 @@ impl Stark {
     let randomizer_root = randomizer_tree.root();
     channel.push_single(&randomizer_root);
 
-    let count = u32::try_from(1 + 2 * transition_quotients.len() + 2 * boundary_quotients.len()).unwrap();
+    let count = u32::try_from(1 + 2 * 1/*transition_quotients.len()*/ + 2 * boundary_quotients.len()).unwrap();
     let weights = self.sample_weights(count, &channel.prover_hash().to_bigint().unwrap());
 
-    let bounds = self.transition_quotient_degree_bounds(&transition_constraints);
-    for i in 0..bounds.len() {
-      if transition_quotients[i].degree() != usize::try_from(bounds[i]).unwrap() {
-        panic!("transition quotient degrees do not match expected value");
-      }
+    let bounds = self.transition_quotient_degree_bound(&single_transition_constraint);
+    if transition_quotient.degree() != usize::try_from(bounds).unwrap() {
+      panic!("transition quotient degrees do not match expected value");
     }
 
-    let transition_quotient_degree_bounds = self.transition_quotient_degree_bounds(&transition_constraints);
+    let transition_quotient_degree_bound = self.transition_quotient_degree_bound(&single_transition_constraint);
     let boundary_quotient_degree_bounds = self.boundary_quotient_degree_bounds(u32::try_from(trace.len()).unwrap(), &boundary);
 
     let mut terms: Vec<Polynomial> = Vec::new();
     terms.push(randomizer_poly);
-    for i in 0..transition_quotients.len() {
-      terms.push(transition_quotients[i].clone());
-      let shift = transition_max_degree - transition_quotient_degree_bounds[i];
-      terms.push(transition_quotients[i].shift_and_clone(shift));
-    }
+
+    terms.push(transition_quotient.clone());
+    let shift = transition_max_degree - transition_quotient_degree_bound;
+    terms.push(transition_quotient.shift_and_clone(shift));
+
     for i in 0..(usize::try_from(self.register_count).unwrap()) {
       terms.push(boundary_quotients[i].clone());
       let shift = transition_max_degree - boundary_quotient_degree_bounds[i];
@@ -345,6 +348,21 @@ impl Stark {
       boundary_quotient_roots.push(channel.pull().data[0].clone());
     }
 
+    let mut transition_weights: Vec<BigInt> = Vec::new();
+    {
+      let coef = self.field.sample(&channel.verifier_hash().to_bigint().unwrap());
+      transition_weights.push(coef.clone());
+      for i in 1..transition_constraints.len() {
+        transition_weights.push(self.field.mul(&transition_weights[i-1], &coef));
+      }
+    }
+
+    // combine all transition constraints using a random linear combination
+    let mut single_transition_constraint = MPolynomial::new(&self.field);
+    for (i, t) in transition_constraints.iter().enumerate() {
+      single_transition_constraint.add(t.clone().mul_scalar(&transition_weights[i]));
+    }
+
     let randomizer_root = channel.pull().data[0].clone();
 
     let count = u32::try_from(1 + 2 * transition_constraints.len() + 2 * usize::try_from(self.register_count).unwrap()).unwrap();
@@ -394,12 +412,12 @@ impl Stark {
       randomizer_map.insert(i, val);
     }
 
-    let transition_quotient_degree_bounds = self.transition_quotient_degree_bounds(&transition_constraints);
+    let transition_quotient_degree_bound = self.transition_quotient_degree_bound(&single_transition_constraint);
     let boundary_quotient_degree_bounds = self.boundary_quotient_degree_bounds(randomized_trace_len, &boundary);
     let boundary_zeroifiers = self.boundary_zeroifiers(&boundary);
     let boundary_interpolants = self.boundary_interpolants(&boundary);
     let transition_zeroifier = self.transition_zeroifier();
-    let transition_constraints_max_degree = self.max_degree(&transition_constraints);
+    let transition_constraints_max_degree = self.max_degree(&single_transition_constraint);
 
     for i in 0..indices.len() {
       let current_index = indices[i];
@@ -428,18 +446,16 @@ impl Stark {
       point.extend(current_trace.clone());
       point.extend(next_trace.clone());
 
-      let transition_constraint_values: Vec<BigInt> = transition_constraints.iter().map(|c| c.eval(&point)).collect();
+      let transition_constraint_value: BigInt = single_transition_constraint.eval(&point);
       let transition_zeroifier_eval_inv = self.field.inv(&transition_zeroifier.eval(&domain_current_index));
 
       let mut terms: Vec<BigInt> = Vec::new();
       terms.push(randomizer_map.get(&current_index).unwrap().to_bigint().unwrap());
-      for j in 0..transition_constraint_values.len() {
-        let tcv = &transition_constraint_values[j];
-        let q = self.field.mul(tcv, &transition_zeroifier_eval_inv);
-        terms.push(q.clone());
-        let shift = transition_constraints_max_degree - transition_quotient_degree_bounds[j];
-        terms.push(self.field.mul(&q, &self.field.exp(&domain_current_index, &BigInt::from(shift))));
-      }
+
+      let q = self.field.mul(&transition_constraint_value, &transition_zeroifier_eval_inv);
+      terms.push(q.clone());
+      let shift = transition_constraints_max_degree - transition_quotient_degree_bound;
+      terms.push(self.field.mul(&q, &self.field.exp(&domain_current_index, &BigInt::from(shift))));
 
       for j in 0..usize::try_from(self.register_count).unwrap() {
         let bqv = leaves[j].get(&current_index).unwrap().to_bigint().unwrap();

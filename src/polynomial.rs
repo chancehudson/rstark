@@ -331,7 +331,7 @@ impl Polynomial {
   }
 
   pub fn mul_fft(poly1: &Polynomial, poly2: &Polynomial, field: &Rc<Field>) -> Polynomial {
-    if poly1.degree() + poly2.degree() < 16 {
+    if poly1.degree() < 4 || poly2.degree() < 4 {
       let mut o = poly1.clone();
       o.mul(&poly2);
       return o;

@@ -101,6 +101,13 @@ impl MPolynomial {
     self
   }
 
+  pub fn mul_scalar(& mut self, val: &BigInt) -> &Self {
+    for (exps, coef) in self.exp_map.iter_mut() {
+      *coef = self.field.mul(&coef, val);
+    }
+    self
+  }
+
   pub fn mul(& mut self, poly: &MPolynomial) -> &Self {
     let mut new_exp: HashMap<Vec<u32>, BigInt> = HashMap::new();
     let zero = BigInt::from(0);
