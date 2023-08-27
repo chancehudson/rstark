@@ -177,7 +177,6 @@ impl Fri {
 
   pub fn verify(&self, channel: & mut Channel) -> Vec<(u32, BigUint)> {
     let mut out: Vec<(u32, BigUint)> = Vec::new();
-    let mut omega = self.omega.clone();
     let mut offset = self.offset.clone();
 
     let mut roots: Vec<BigUint> = Vec::new();
@@ -194,18 +193,19 @@ impl Fri {
     }
 
     let degree: usize = (last_codeword.len() / usize::try_from(self.expansion_factor).unwrap()) - 1;
-    let mut last_omega = omega.clone();
     let mut last_offset = offset.clone();
     for _ in 0..(self.round_count() - 1) {
-      last_omega = self.field.mul(&last_omega, &last_omega);
       last_offset = self.field.mul(&last_offset, &last_offset);
     }
-    if self.field.inv(&last_omega) != self.field.exp(&last_omega, &BigInt::from(last_codeword.len() - 1)) {
+
+    let omega_domain = self.field.domain(&self.omega, self.domain_len);
+    let omega_start_index = 2_usize.pow(self.round_count() - 1);
+    if self.field.inv(&omega_domain[omega_start_index]) != self.field.exp(&omega_domain[omega_start_index], &BigInt::from(last_codeword.len() - 1)) {
       panic!("omega order incorrect");
     }
 
     let last_domain = last_codeword.iter().enumerate().map(|(index, _)| {
-      return self.field.mul(&last_offset, &self.field.exp(&last_omega, &BigInt::from(index)));
+      return self.field.mul(&last_offset, &omega_domain[omega_start_index * index]);
     }).collect();
 
     let poly = Polynomial::interpolate_fft(&last_domain, &last_codeword.iter().map(|v| v.to_bigint().unwrap()).collect(), &self.field);
@@ -226,6 +226,7 @@ impl Fri {
     );
     let mut colinearity_x_vals: Vec<Vec<BigInt>> = Vec::new();
     let mut colinearity_y_vals: Vec<Vec<BigInt>> = Vec::new();
+    let mut exp = 1;
     for i in 0..usize::try_from(self.round_count() - 1).unwrap() {
       let indices_c: Vec<u32> = top_indices.iter().map(|val| val % (self.domain_len >> (i+1))).collect();
       let indices_a: Vec<u32> = indices_c.clone();
@@ -247,8 +248,10 @@ impl Fri {
           out.push((indices_b[j], y_points_msg.data[1].clone()));
         }
 
-        let ax = self.field.mul(&offset, &self.field.exp(&omega, &BigInt::from(indices_a[j])));
-        let bx = self.field.mul(&offset, &self.field.exp(&omega, &BigInt::from(indices_b[j])));
+        let index_a_usize = usize::try_from(indices_a[j]).unwrap();
+        let index_b_usize = usize::try_from(indices_b[j]).unwrap();
+        let ax = self.field.mul(&offset, &omega_domain[exp * index_a_usize]).clone();
+        let bx = self.field.mul(&offset, &omega_domain[exp * index_b_usize]).clone();
 
         let cx = alphas[usize::try_from(i).unwrap()].clone();
 
@@ -266,7 +269,7 @@ impl Fri {
         Tree::verify(&roots[i+1], indices_c[j], &channel.pull().data, &cc[j]);
       }
 
-      omega = self.field.mul(&omega, &omega);
+      exp *= 2;
       offset = self.field.mul(&offset, &offset);
     }
 

@@ -102,7 +102,7 @@ impl MPolynomial {
   }
 
   pub fn mul_scalar(& mut self, val: &BigInt) -> &Self {
-    for (exps, coef) in self.exp_map.iter_mut() {
+    for (_exps, coef) in self.exp_map.iter_mut() {
       *coef = self.field.mul(&coef, val);
     }
     self
@@ -146,7 +146,7 @@ impl MPolynomial {
   pub fn eval_symbolic(&self, polys: &Vec<Polynomial>) -> Polynomial {
     let mut out = Polynomial::new(&self.field);
     let mut degrees: Vec<u32> = Vec::new();
-    for (exps, coef) in self.exps() {
+    for (exps, _coef) in self.exps() {
       for (i, e) in exps.iter().enumerate() {
         if i >= degrees.len() {
           degrees.resize(i+1, 0);

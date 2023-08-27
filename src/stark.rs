@@ -96,7 +96,7 @@ impl Stark {
   }
 
   fn max_degree(&self, constraint: &MPolynomial) -> u32 {
-    let mut degree: u32 = self.transition_quotient_degree_bound(constraint);
+    let degree: u32 = self.transition_quotient_degree_bound(constraint);
     let mut max_degree = degree.ilog2();
     if 2_u32.pow(max_degree) != degree {
       max_degree += 1;
@@ -452,16 +452,29 @@ impl Stark {
       let mut terms: Vec<BigInt> = Vec::new();
       terms.push(randomizer_map.get(&current_index).unwrap().to_bigint().unwrap());
 
+      // power map for domain_current_index
+      let mut power_map: HashMap<u32, BigInt> = HashMap::new();
+
       let q = self.field.mul(&transition_constraint_value, &transition_zeroifier_eval_inv);
       terms.push(q.clone());
       let shift = transition_constraints_max_degree - transition_quotient_degree_bound;
-      terms.push(self.field.mul(&q, &self.field.exp(&domain_current_index, &BigInt::from(shift))));
+      {
+        let exp = self.field.exp(&domain_current_index, &BigInt::from(shift));
+        terms.push(self.field.mul(&q, &exp));
+        power_map.insert(shift, exp);
+      }
 
       for j in 0..usize::try_from(self.register_count).unwrap() {
         let bqv = leaves[j].get(&current_index).unwrap().to_bigint().unwrap();
         terms.push(bqv.clone());
         let shift = transition_constraints_max_degree - boundary_quotient_degree_bounds[j];
-        terms.push(self.field.mul(&bqv, &self.field.exp(&domain_current_index, &BigInt::from(shift))));
+        if let Some(exp) = power_map.get(&shift) {
+          terms.push(self.field.mul(&bqv, exp));
+        } else {
+          let exp = self.field.exp(&domain_current_index, &BigInt::from(shift));
+          terms.push(self.field.mul(&bqv, &exp));
+          power_map.insert(shift, exp);
+        }
       }
 
       let mut combination = BigInt::from(0);

@@ -519,8 +519,11 @@ impl Polynomial {
     let left_offset = right_zeroifier.eval_batch_fast_slice(&x_vals[0..half]);
     let right_offset = left_zeroifier.eval_batch_fast_slice(&x_vals[half..]);
 
-    let left_targets = y_vals[0..half].iter().enumerate().map(|(i, v)| field.div(v, &left_offset[i])).collect::<Vec<BigInt>>();
-    let right_targets = y_vals[half..].iter().enumerate().map(|(i, v)| field.div(v, &right_offset[i])).collect::<Vec<BigInt>>();
+    let left_offset_inv = field.inv_batch(&left_offset);
+    let right_offset_inv = field.inv_batch(&right_offset);
+
+    let left_targets = y_vals[0..half].iter().enumerate().map(|(i, v)| field.mul(v, &left_offset_inv[i])).collect::<Vec<BigInt>>();
+    let right_targets = y_vals[half..].iter().enumerate().map(|(i, v)| field.mul(v, &right_offset_inv[i])).collect::<Vec<BigInt>>();
 
     let mut left_interpolant = Self::interpolate_fft_slice(&x_vals[0..half], &left_targets[0..], field);
     let mut right_interpolant = Self::interpolate_fft_slice(&x_vals[half..], &right_targets[0..], field);

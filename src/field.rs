@@ -123,6 +123,9 @@ impl Field {
 
   // exponent should always be >= 0
   pub fn exp(&self, v: &BigInt, e: &BigInt) -> BigInt {
+    if e == &Field::one() {
+      return v.clone();
+    }
     self.modd(v).modpow(e, &self.p)
   }
 
