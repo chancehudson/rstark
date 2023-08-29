@@ -1,4 +1,4 @@
-use num_bigint::{BigInt};
+use num_bigint::{BigInt, Sign};
 use crate::field::Field;
 use std::rc::Rc;
 
@@ -256,10 +256,35 @@ impl Polynomial {
     Self::eval_fft(&scaled.coefs(), &domain, &self.field)
   }
 
+  pub fn eval_batch_batch_coset(polys: &Vec<Polynomial>, offset: &BigInt, size: u32, field: &Rc<Field>) -> Vec<Vec<BigInt>> {
+    let offset_domain = field.domain(&offset, size);
+    let mut scaled = polys.iter().map(|poly| {
+      let mut p = poly.clone();
+      p.scale_precalc(offset, &offset_domain);
+      p
+    }).collect();
+    let (generator, _) = field.generator_cache(&size);
+    let domain = field.domain(&generator, size);
+    Self::eval_fft_batch(&scaled, &domain, field)
+  }
+
   // Evaluate a polynomial over a multiplicative subgroup
   // domain cannot be a coset
   pub fn eval_batch_fft(&self, domain: &Vec<BigInt>) -> Vec<BigInt> {
     Polynomial::eval_fft(&self.coefs(), domain, &self.field)
+  }
+
+  pub fn eval_fft_batch(polys: &Vec<Polynomial>, domain: &Vec<BigInt>, field: &Rc<Field>) -> Vec<Vec<BigInt>> {
+    let mut out: Vec<Vec<BigInt>> = Vec::new();
+    for _ in 0..polys.len() {
+      let mut v = vec!(BigInt::from(0); domain.len());
+      v.reserve(5);
+      out.push(v);
+    }
+    let mut scratch1 = BigInt::from(0);
+    let mut scratch2 = BigInt::from(0);
+    Self::eval_fft_batch_(polys, domain, field, 1, 0, 0, domain.len()/2, & mut out, & mut scratch1, & mut scratch2);
+    out
   }
 
   pub fn eval_fft(coefs: &Vec<BigInt>, domain: &Vec<BigInt>, field: &Rc<Field>) -> Vec<BigInt> {
@@ -267,6 +292,59 @@ impl Polynomial {
     Self::eval_fft_(coefs, domain, field, 1, 0, 0, domain.len()/2, & mut out);
     out
   }
+
+  pub fn eval_fft_batch_(
+    polys: &[Polynomial],
+    domain: &[BigInt],
+    field: &Rc<Field>,
+    slice_len: usize,
+    offset: usize,
+    left_dest: usize,
+    right_dest: usize,
+    out: & mut Vec<Vec<BigInt>>,
+    scratch1: & mut BigInt,
+    scratch2: & mut BigInt,
+    ) {
+    let out_size = domain.len() / slice_len;
+
+    if out_size == 1 {
+      for (i, p) in polys.iter().enumerate() {
+        if let Some(v) = p.coefs().get(offset) {
+          out[i][left_dest].clone_from(v);
+        }
+      }
+      // otherwise the coef is 0 which is the default value in `out`
+      return;
+    }
+
+    Self::eval_fft_batch_(polys, domain, field, slice_len*2, offset, left_dest, left_dest + out_size/4, out, scratch1, scratch2);
+    Self::eval_fft_batch_(polys, domain, field, slice_len*2, offset + slice_len, right_dest, right_dest + out_size/4, out, scratch1, scratch2);
+    // let mut scratch = BigInt::from(0);
+
+    for i in 0..(out_size/2) {
+      for j in 0..out.len() {
+        let left_index = left_dest + i;
+        let right_index = right_dest + i;
+        // bring the values into the field using simple arithmetic
+        // instead of relying on modulus
+        // offers a small speedup
+        //
+        // use this complicated scratch system to avoid
+        // heap (de)allocations
+        *scratch1 = field.mul(&out[j][right_index], &domain[i*slice_len]);
+        *scratch2 = &out[j][left_index] - &(*scratch1);
+        if scratch2.sign() == Sign::Minus {
+          *scratch2 += field.p();
+        }
+        out[j][left_index] += &(*scratch1);
+        if &out[j][left_index] > field.p() {
+          out[j][left_index] -= field.p();
+        }
+        out[j][right_index].clone_from(scratch2);
+      }
+    }
+  }
+
 
   // fft implemented by mutating a single `out` vec
   // this saves the cost of alloc/freeing vectors

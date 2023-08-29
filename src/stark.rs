@@ -203,14 +203,15 @@ impl Stark {
 
     let mut boundary_quotient_codewords: Vec<Vec<BigUint>> = Vec::new();
     let mut boundary_quotient_trees: Vec<Tree> = Vec::new();
+    let codewords = Polynomial::eval_batch_batch_coset(&boundary_quotients, &self.fri.offset, self.fri_domain_len, &self.field);
     for i in 0..usize::try_from(self.register_count).unwrap() {
-      let codewords: Vec<BigUint> = boundary_quotients[i].eval_batch_coset(&self.fri.offset, self.fri_domain_len)
+      let c: Vec<BigUint> = codewords[i]
         .iter()
         .map(|v| v.to_biguint().unwrap())
         .collect();
-      let tree = Tree::build(&codewords);
+      let tree = Tree::build(&c);
       channel.push_single(&tree.root());
-      boundary_quotient_codewords.push(codewords);
+      boundary_quotient_codewords.push(c);
       boundary_quotient_trees.push(tree);
     }
 
