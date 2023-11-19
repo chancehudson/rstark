@@ -378,10 +378,6 @@ impl<T: FieldElement> Polynomial<T> {
             for j in 0..out.len() {
                 let left_index = left_dest + i;
                 let right_index = right_dest + i;
-                // bring the values into the field using simple arithmetic
-                // instead of relying on modulus
-                // offers a small speedup
-                //
                 // use this complicated scratch system to avoid
                 // heap (de)allocations
                 *scratch1 = field.mul(&out[j][right_index], &domain[i * slice_len]);
@@ -441,19 +437,13 @@ impl<T: FieldElement> Polynomial<T> {
 
         for i in 0..(out_size / 2) {
             let left_out;
-            let mut right_out;
+            let right_out;
             {
                 let x = &out[left_dest + i];
                 let y = &out[right_dest + i];
                 let y_root = field.mul(y, &domain[i * slice_len]);
-                // bring the values into the field using simple arithmetic
-                // instead of relying on modulus
-                // offers a small speedup
                 left_out = x.add(&y_root, field.p());
                 right_out = x.sub(&y_root, field.p());
-                if y_root > *x {
-                    right_out = right_out.add(field.p(), field.p());
-                }
             }
             out[left_dest + i] = left_out;
             out[right_dest + i] = right_out;
