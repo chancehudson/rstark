@@ -201,7 +201,6 @@ impl FieldElement for BigIntElement {
     fn modd(&self, p: &Self) -> Self {
         assert!(p.0.sign() == Sign::Plus);
         if self.0.sign() == Sign::Minus {
-            println!("modd: {:?}", &self.0);
             BigIntElement(((-&self.0) / &p.0 + 1) * &p.0 + &self.0)
         } else {
             BigIntElement(&self.0 % &p.0)
