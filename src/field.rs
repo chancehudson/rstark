@@ -48,11 +48,11 @@ impl<T: FieldElement> Field<T> {
     }
 
     pub fn bigint(&self, val: i32) -> T {
-        self.modd(T::from_i32(val))
+        T::from_i32(val).modd(self.p())
     }
 
     pub fn biguint(&self, val: u32) -> T {
-        self.modd(T::from_u32(val))
+        T::from_u32(val).modd(self.p())
     }
 
     pub fn p(&self) -> &T {
@@ -71,40 +71,20 @@ impl<T: FieldElement> Field<T> {
         T::one()
     }
 
-    pub fn modd(&self, v: T) -> T {
-        if v.is_minus() {
-            // v + p*((-v/p)+1)
-            return v.add(&self.p.mul(&v.neg().div(&self.p).add(&T::one())));
-        }
-        v.modd(&self.p)
-    }
-
     pub fn add(&self, v1: &T, v2: &T) -> T {
-        self.modd(v1.add(v2))
-    }
-
-    pub fn ladd(&self, v1: &T, v2: &T) -> T {
-        v1.add(v2)
+        v1.add(v2, self.p())
     }
 
     pub fn mul(&self, v1: &T, v2: &T) -> T {
-        self.modd(v1.mul(v2))
-    }
-
-    pub fn lmul(&self, v1: &T, v2: &T) -> T {
-        v1.mul(v2)
+        v1.mul(v2, self.p())
     }
 
     pub fn sub(&self, v1: &T, v2: &T) -> T {
-        self.modd(v1.sub(v2))
-    }
-
-    pub fn lsub(&self, v1: &T, v2: &T) -> T {
-        v1.sub(v2)
+        v1.sub(v2, self.p())
     }
 
     pub fn neg(&self, v: &T) -> T {
-        self.modd(self.p.sub(v))
+        self.p.sub(v, self.p())
     }
 
     pub fn div(&self, v1: &T, v2: &T) -> T {
@@ -116,7 +96,7 @@ impl<T: FieldElement> Field<T> {
         if e == &Field::one() {
             v.clone()
         } else {
-            self.modd(v.clone()).modpow(e, &self.p)
+            v.modpow(e, self.p())
         }
     }
 
@@ -133,9 +113,9 @@ impl<T: FieldElement> Field<T> {
         if size >= self.p {
             panic!("requested subgroup is larger than field");
         }
-        let numer = &self.p.sub(&T::one());
-        let exp = numer.div(&size);
-        if exp.mul(&size) != *numer {
+        let numer = &self.p.sub(&T::one(), self.p());
+        let exp = numer.div(&size, self.p());
+        if exp.mul(&size, self.p()) != *numer {
             panic!("subgroup is not a divisor of field");
         }
         self.exp(&self.g, &exp)
@@ -167,7 +147,7 @@ impl<T: FieldElement> Field<T> {
     }
 
     pub fn sample(&self, input: T) -> T {
-        self.modd(input)
+        input.modd(self.p())
     }
 
     pub fn sample_bytes(&self, input: &[u8]) -> T {

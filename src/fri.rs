@@ -167,16 +167,16 @@ impl<T: FieldElement> Fri<T> {
                         val,
                         &self
                             .field
-                            .ladd(&Field::one(), &self.field.lmul(&alpha, &inv_omega)),
+                            .add(&Field::one(), &self.field.mul(&alpha, &inv_omega)),
                     );
                     //  (one - alpha / (offset * (omega^i)) ) * codeword[len(codeword)//2 + i] ) for i in range(len(codeword)//2)]
                     let b = self.field.mul(
                         &self
                             .field
-                            .lsub(&Field::one(), &self.field.lmul(&alpha, &inv_omega)),
+                            .sub(&Field::one(), &self.field.mul(&alpha, &inv_omega)),
                         &codeword[(codeword.len() >> 1) + index],
                     );
-                    self.field.mul(&two_inv, &self.field.ladd(&a, &b))
+                    self.field.mul(&two_inv, &self.field.add(&a, &b))
                 })
                 .collect();
 

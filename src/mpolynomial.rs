@@ -142,7 +142,7 @@ impl<T: FieldElement> MPolynomial<T> {
                 }
                 inter = self
                     .field
-                    .lmul(&inter, &self.field.exp(&points[i], &T::from_u32(exps[i])));
+                    .mul(&inter, &self.field.exp(&points[i], &T::from_u32(exps[i])));
             }
             out = self.field.add(&out, &inter);
         }
@@ -298,7 +298,7 @@ mod tests {
     fn should_eval_multipolynomial() {
         let p = BigIntElement(BigInt::from(101));
         let g = BigIntElement(BigInt::from(0));
-        let f = Rc::new(Field::new(p, g));
+        let f = Rc::new(Field::new(p.clone(), g));
 
         // 4x + 2y^2 + 9
         let mut poly = MPolynomial::new(&f);
@@ -308,7 +308,7 @@ mod tests {
 
         // x: 50, y: 20
         // 4*50 + 2*20^2 + 9
-        let expected = f.modd(BigIntElement(BigInt::from(1009)));
+        let expected = BigIntElement(BigInt::from(1009)).modd(&p);
 
         assert_eq!(
             poly.eval(&[

@@ -126,7 +126,7 @@ impl<T: FieldElement> Polynomial<T> {
                 let e = j + i;
                 out[e] = self
                     .field
-                    .add(&out[e], &self.field.lmul(&self.coefs[j], &poly.coefs()[i]));
+                    .add(&out[e], &self.field.mul(&self.coefs[j], &poly.coefs()[i]));
             }
         }
         self.coefs = out;
@@ -213,7 +213,7 @@ impl<T: FieldElement> Polynomial<T> {
         }
         let mut out = self.field.mul(v, &self.coefs[self.coefs.len() - 1]);
         for coef in self.coefs[1..(self.coefs.len() - 1)].iter().rev() {
-            out = self.field.mul(v, &self.field.ladd(coef, &out));
+            out = self.field.mul(v, &self.field.add(coef, &out));
         }
         out = self.field.add(&out, &self.coefs[0]);
         out
@@ -385,14 +385,8 @@ impl<T: FieldElement> Polynomial<T> {
                 // use this complicated scratch system to avoid
                 // heap (de)allocations
                 *scratch1 = field.mul(&out[j][right_index], &domain[i * slice_len]);
-                *scratch2 = out[j][left_index].sub(scratch1);
-                if scratch2.is_minus() {
-                    *scratch2 = scratch2.add(field.p());
-                }
-                out[j][left_index] = out[j][left_index].add(scratch1);
-                if &out[j][left_index] > field.p() {
-                    out[j][left_index] = out[j][left_index].sub(field.p());
-                }
+                *scratch2 = out[j][left_index].sub(scratch1, field.p());
+                out[j][left_index] = out[j][left_index].add(scratch1, field.p());
                 out[j][right_index].clone_from(scratch2);
             }
         }
@@ -446,7 +440,7 @@ impl<T: FieldElement> Polynomial<T> {
         );
 
         for i in 0..(out_size / 2) {
-            let mut left_out;
+            let left_out;
             let mut right_out;
             {
                 let x = &out[left_dest + i];
@@ -455,13 +449,10 @@ impl<T: FieldElement> Polynomial<T> {
                 // bring the values into the field using simple arithmetic
                 // instead of relying on modulus
                 // offers a small speedup
-                left_out = x.add(&y_root);
-                if &left_out > field.p() {
-                    left_out = left_out.sub(field.p());
-                }
-                right_out = x.sub(&y_root);
+                left_out = x.add(&y_root, field.p());
+                right_out = x.sub(&y_root, field.p());
                 if y_root > *x {
-                    right_out = right_out.add(field.p());
+                    right_out = right_out.add(field.p(), field.p());
                 }
             }
             out[left_dest + i] = left_out;
@@ -633,7 +624,7 @@ impl<T: FieldElement> Polynomial<T> {
                 if i == j {
                     continue;
                 }
-                denominator = field.mul(&denominator, &x_vals[i].sub(&x_vals[j]));
+                denominator = field.mul(&denominator, &x_vals[i].sub(&x_vals[j], field.p()));
             }
             let mut n = Polynomial::new(field);
             n.term(&field.bigint(1), 1);

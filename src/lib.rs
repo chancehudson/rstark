@@ -117,16 +117,16 @@ extern "C" {
 }
 
 pub trait FieldElement: Eq + PartialEq + Clone + PartialOrd + Hash + Debug {
-    fn add(&self, v: &Self) -> Self;
-    fn mul(&self, v: &Self) -> Self;
-    fn sub(&self, v: &Self) -> Self;
-    fn div(&self, v: &Self) -> Self;
-    fn modd(&self, v: &Self) -> Self;
-    fn neg(&self) -> Self;
+    fn add(&self, v: &Self, p: &Self) -> Self;
+    fn mul(&self, v: &Self, p: &Self) -> Self;
+    fn sub(&self, v: &Self, p: &Self) -> Self;
+    fn div(&self, v: &Self, p: &Self) -> Self;
+    fn modpow(&self, e: &Self, p: &Self) -> Self;
+    fn modd(&self, p: &Self) -> Self;
+
     fn two() -> Self;
     fn one() -> Self;
     fn zero() -> Self;
-    fn is_minus(&self) -> bool;
     fn extended_gcd(&self, v: &Self) -> Self;
     fn bits(&self) -> u64;
     fn from_u32(v: u32) -> Self;
@@ -135,7 +135,6 @@ pub trait FieldElement: Eq + PartialEq + Clone + PartialOrd + Hash + Debug {
     fn from_bytes_le(v: &[u8]) -> Self;
     fn to_bytes_le(&self) -> Vec<u8>;
     fn to_bytes_le_sized(&self) -> [u8; 32];
-    fn modpow(&self, e: &Self, m: &Self) -> Self;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, PartialOrd, Hash, Deserialize)]
@@ -145,10 +144,7 @@ impl FieldElement for BigIntElement {
     fn to_u32(&self) -> u32 {
         let (_, digits) = self.0.to_u32_digits();
         if digits.is_empty() {
-            if digits.is_empty() {
-                return 0;
-            }
-            panic!("invalid bigint digits len for u32 conversion");
+            return 0;
         }
         digits[0]
     }
@@ -163,9 +159,6 @@ impl FieldElement for BigIntElement {
         let mut extended = self.to_bytes_le();
         extended.resize(32, 0);
         extended.try_into().unwrap()
-    }
-    fn modpow(&self, e: &Self, m: &Self) -> Self {
-        BigIntElement(self.0.modpow(&e.0, &m.0))
     }
     fn from_i32(v: i32) -> Self {
         BigIntElement(BigInt::from(v))
@@ -193,29 +186,28 @@ impl FieldElement for BigIntElement {
     fn zero() -> Self {
         BigIntElement(BigInt::from(0))
     }
-    fn add(&self, v: &Self) -> Self {
-        BigIntElement(&self.0 + &v.0)
+    fn add(&self, v: &Self, p: &Self) -> Self {
+        BigIntElement(&self.0 + &v.0).modd(p)
     }
-    fn div(&self, v: &Self) -> Self {
-        BigIntElement(&self.0 / &v.0)
+    fn div(&self, v: &Self, p: &Self) -> Self {
+        BigIntElement(&self.0 / &v.0).modd(p)
     }
-    fn mul(&self, v: &Self) -> Self {
-        BigIntElement(&self.0 * &v.0)
+    fn mul(&self, v: &Self, p: &Self) -> Self {
+        BigIntElement(&self.0 * &v.0).modd(p)
     }
-
-    fn sub(&self, v: &Self) -> Self {
-        BigIntElement(&self.0 - &v.0)
+    fn sub(&self, v: &Self, p: &Self) -> Self {
+        BigIntElement(&self.0 - &v.0).modd(p)
     }
-
-    fn modd(&self, v: &Self) -> Self {
-        BigIntElement(&self.0 % &v.0)
+    fn modd(&self, p: &Self) -> Self {
+        assert!(p.0.sign() == Sign::Plus);
+        if self.0.sign() == Sign::Minus {
+            println!("modd: {:?}", &self.0);
+            BigIntElement(((-&self.0) / &p.0 + 1) * &p.0 + &self.0)
+        } else {
+            BigIntElement(&self.0 % &p.0)
+        }
     }
-
-    fn neg(&self) -> Self {
-        BigIntElement(&self.0 * BigInt::from(-1))
-    }
-
-    fn is_minus(&self) -> bool {
-        self.0.sign() == Sign::Minus
+    fn modpow(&self, e: &Self, p: &Self) -> Self {
+        BigIntElement(self.0.modpow(&e.0, &p.0))
     }
 }

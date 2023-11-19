@@ -167,7 +167,7 @@ impl<T: FieldElement> Stark<T> {
             hasher.update(&randomness.to_bytes_le());
             hasher.update(&T::from_u32(i).to_bytes_le());
             let v = T::from_bytes_le(hasher.finalize().as_bytes());
-            out.push(self.field.modd(v));
+            out.push(v.modd(&self.field.p()));
         }
         out
     }
