@@ -1,26 +1,25 @@
-use crate::field::Field;
-use num_bigint::{BigInt, Sign};
+use crate::{field::Field, FieldElement};
 use std::rc::Rc;
 
-#[derive(Clone)]
-pub struct Polynomial {
-    field: Rc<Field>,
-    coefs: Vec<BigInt>,
+#[derive(Clone, Debug)]
+pub struct Polynomial<T: FieldElement> {
+    field: Rc<Field<T>>,
+    coefs: Vec<T>,
 }
 
-impl Polynomial {
-    pub fn field(&self) -> &Rc<Field> {
+impl<T: FieldElement> Polynomial<T> {
+    pub fn field(&self) -> &Rc<Field<T>> {
         &self.field
     }
 
-    pub fn new(f: &Rc<Field>) -> Polynomial {
+    pub fn new(f: &Rc<Field<T>>) -> Polynomial<T> {
         Polynomial {
             field: Rc::clone(f),
             coefs: Vec::new(),
         }
     }
 
-    pub fn coefs(&self) -> &Vec<BigInt> {
+    pub fn coefs(&self) -> &Vec<T> {
         &self.coefs
     }
 
@@ -32,7 +31,7 @@ impl Polynomial {
                 return index;
             }
         }
-        return 0;
+        0
     }
 
     pub fn is_zero(&self) -> bool {
@@ -45,7 +44,7 @@ impl Polynomial {
         true
     }
 
-    pub fn is_equal(&self, poly: &Polynomial) -> bool {
+    pub fn is_equal(&self, poly: &Polynomial<T>) -> bool {
         let zero = Field::zero();
         let larger;
         let smaller;
@@ -69,17 +68,17 @@ impl Polynomial {
         true
     }
 
-    pub fn term(&mut self, coef: &BigInt, exp: u32) -> &Self {
+    pub fn term(&mut self, coef: &T, exp: u32) -> &Self {
         let s = usize::try_from(exp).unwrap();
         // expand to one longer to handle 0 exponents
         if self.coefs.len() < s + 1 {
             self.coefs.resize(s + 1, Field::zero());
         }
-        self.coefs[s] = self.field.add(&self.coefs[s], &coef);
+        self.coefs[s] = self.field.add(&self.coefs[s], coef);
         self
     }
 
-    pub fn add(&mut self, poly: &Polynomial) -> &Self {
+    pub fn add(&mut self, poly: &Polynomial<T>) -> &Self {
         for i in 0..self.coefs().len() {
             if i >= poly.coefs().len() {
                 break;
@@ -92,7 +91,7 @@ impl Polynomial {
         self
     }
 
-    pub fn sub(&mut self, poly: &Polynomial) -> &Self {
+    pub fn sub(&mut self, poly: &Polynomial<T>) -> &Self {
         for i in 0..self.coefs().len() {
             if i >= poly.coefs().len() {
                 break;
@@ -110,15 +109,15 @@ impl Polynomial {
     // e.g. multiplying by x^5
     pub fn shift_and_clone(&self, degree: u32) -> Self {
         let degree_usize = usize::try_from(degree).unwrap();
-        let mut shifted_coefs = vec![BigInt::from(0); degree_usize];
+        let mut shifted_coefs = vec![T::zero(); degree_usize];
         shifted_coefs.extend(self.coefs.clone());
         let mut out = Polynomial::new(&self.field);
         out.coefs = shifted_coefs;
         out
     }
 
-    pub fn mul(&mut self, poly: &Polynomial) -> &Self {
-        let mut out: Vec<BigInt> = Vec::new();
+    pub fn mul(&mut self, poly: &Polynomial<T>) -> &Self {
+        let mut out = Vec::new();
         out.resize(self.coefs.len() + poly.coefs().len(), Field::zero());
         for i in 0..poly.coefs().len() {
             // self.mul_term(&poly.coefs()[i], i);
@@ -127,7 +126,7 @@ impl Polynomial {
                 let e = j + i;
                 out[e] = self
                     .field
-                    .add(&out[e], &self.field.lmul(&self.coefs[j], &poly.coefs()[i]));
+                    .add(&out[e], &self.field.mul(&self.coefs[j], &poly.coefs()[i]));
             }
         }
         self.coefs = out;
@@ -135,7 +134,7 @@ impl Polynomial {
         self
     }
 
-    pub fn mul_scalar(&mut self, v: &BigInt) -> &Self {
+    pub fn mul_scalar(&mut self, v: &T) -> &Self {
         for i in 0..self.coefs.len() {
             self.coefs[i] = self.field.mul(v, &self.coefs[i]);
         }
@@ -144,9 +143,9 @@ impl Polynomial {
 
     pub fn exp(&mut self, v: usize) -> &Self {
         let mut out = Polynomial::new(&self.field);
-        out.term(&BigInt::from(1), 0);
+        out.term(&T::one(), 0);
         for _ in 0..v {
-            out.mul(&self);
+            out.mul(self);
         }
         self.coefs = out.coefs;
         self
@@ -154,39 +153,36 @@ impl Polynomial {
 
     // if we're scaling the polynomial using a generator point or similar
     // we probably already have a list of the exponents laying around
-    pub fn scale_precalc(&mut self, _v: &BigInt, exps: &Vec<BigInt>) -> &Self {
+    pub fn scale_precalc(&mut self, _v: &T, exps: &Vec<T>) -> &Self {
         self.coefs = self
             .coefs
             .iter()
             .enumerate()
-            .map(|(exp, coef)| {
-                return self.field.mul(&exps[exp], &coef);
-            })
+            .map(|(exp, coef)| self.field.mul(&exps[exp], coef))
             .collect();
         self
     }
 
-    pub fn scale(&mut self, v: &BigInt) -> &Self {
+    pub fn scale(&mut self, v: T) -> &Self {
         self.coefs = self
             .coefs
             .iter()
             .enumerate()
             .map(|(exp, coef)| {
-                return self
-                    .field
-                    .mul(&self.field.exp(&v, &BigInt::from(exp)), &coef);
+                self.field
+                    .mul(&self.field.exp(&v, &T::from_u32(exp as u32)), coef)
             })
             .collect();
         self
     }
 
     // compose `poly` into `this`
-    pub fn compose(&mut self, poly: &Polynomial) -> &Self {
+    pub fn compose(&mut self, poly: &Polynomial<T>) -> &Self {
         let mut out = Polynomial::new(&self.field);
         for (exp, coef) in self.coefs.iter().enumerate() {
             let mut p = poly.clone();
             p.exp(exp);
-            p.mul_scalar(&coef);
+            p.mul_scalar(coef);
             out.add(&p);
         }
         self.coefs = out.coefs;
@@ -208,39 +204,39 @@ impl Polynomial {
 
     // using horners method
     // https://en.wikipedia.org/wiki/Horner%27s_method
-    pub fn eval(&self, v: &BigInt) -> BigInt {
-        if self.coefs.len() == 0 {
-            return BigInt::from(0);
+    pub fn eval(&self, v: &T) -> T {
+        if self.coefs.is_empty() {
+            return T::zero();
         }
         if self.coefs.len() == 1 {
             return self.coefs[0].clone();
         }
-        let mut out = self.field.mul(&v, &self.coefs[self.coefs.len() - 1]);
+        let mut out = self.field.mul(v, &self.coefs[self.coefs.len() - 1]);
         for coef in self.coefs[1..(self.coefs.len() - 1)].iter().rev() {
-            out = self.field.mul(&v, &self.field.ladd(&coef, &out));
+            out = self.field.mul(v, &self.field.add(coef, &out));
         }
         out = self.field.add(&out, &self.coefs[0]);
         out
     }
 
-    pub fn eval_batch(&self, vals: &Vec<BigInt>) -> Vec<BigInt> {
+    pub fn eval_batch(&self, vals: &Vec<T>) -> Vec<T> {
         vals.iter().map(|v| self.eval(v)).collect()
     }
 
     // https://en.wikipedia.org/wiki/Polynomial_evaluation#Multipoint_evaluation
-    pub fn eval_batch_fast(&self, vals: &Vec<BigInt>) -> Vec<BigInt> {
+    pub fn eval_batch_fast(&self, vals: &Vec<T>) -> Vec<T> {
         self.eval_batch_fast_slice(&vals[0..])
     }
 
-    pub fn eval_batch_fast_slice(&self, vals: &[BigInt]) -> Vec<BigInt> {
+    pub fn eval_batch_fast_slice(&self, vals: &[T]) -> Vec<T> {
         if vals.len() < 8 {
             return self.eval_batch(&vals.to_vec());
         }
         self.eval_batch_fast_(&vals[0..])
     }
 
-    fn eval_batch_fast_(&self, vals: &[BigInt]) -> Vec<BigInt> {
-        if vals.len() == 0 {
+    fn eval_batch_fast_(&self, vals: &[T]) -> Vec<T> {
+        if vals.is_empty() {
             return Vec::new();
         }
         if vals.len() == 1 {
@@ -259,30 +255,30 @@ impl Polynomial {
         left
     }
 
-    pub fn eval_batch_coset(&self, offset: &BigInt, size: u32) -> Vec<BigInt> {
+    pub fn eval_batch_coset(&self, offset: &T, size: u32) -> Vec<T> {
         let mut scaled = self.clone();
-        let offset_domain = self.field.domain(&offset, size);
+        let offset_domain = self.field.domain(offset, size);
         scaled.scale_precalc(offset, &offset_domain);
         let (generator, _) = self.field.generator_cache(&size);
         let domain = self.field.domain(&generator, size);
-        Self::eval_fft(&scaled.coefs(), &domain, &self.field)
+        Self::eval_fft(scaled.coefs(), &domain, &self.field)
     }
 
     pub fn eval_batch_batch_coset(
-        polys: &Vec<Polynomial>,
-        offset: &BigInt,
+        polys: Vec<Polynomial<T>>,
+        offset: &T,
         size: u32,
-        field: &Rc<Field>,
-    ) -> Vec<Vec<BigInt>> {
-        let offset_domain = field.domain(&offset, size);
-        let mut scaled = polys
+        field: &Rc<Field<T>>,
+    ) -> Vec<Vec<T>> {
+        let offset_domain = field.domain(offset, size);
+        let scaled = polys
             .iter()
             .map(|poly| {
                 let mut p = poly.clone();
                 p.scale_precalc(offset, &offset_domain);
                 p
             })
-            .collect();
+            .collect::<Vec<Polynomial<T>>>();
         let (generator, _) = field.generator_cache(&size);
         let domain = field.domain(&generator, size);
         Self::eval_fft_batch(&scaled, &domain, field)
@@ -290,23 +286,23 @@ impl Polynomial {
 
     // Evaluate a polynomial over a multiplicative subgroup
     // domain cannot be a coset
-    pub fn eval_batch_fft(&self, domain: &Vec<BigInt>) -> Vec<BigInt> {
-        Polynomial::eval_fft(&self.coefs(), domain, &self.field)
+    pub fn eval_batch_fft(&self, domain: &Vec<T>) -> Vec<T> {
+        Polynomial::eval_fft(self.coefs(), domain, &self.field)
     }
 
     pub fn eval_fft_batch(
-        polys: &Vec<Polynomial>,
-        domain: &Vec<BigInt>,
-        field: &Rc<Field>,
-    ) -> Vec<Vec<BigInt>> {
-        let mut out: Vec<Vec<BigInt>> = Vec::new();
+        polys: &Vec<Polynomial<T>>,
+        domain: &Vec<T>,
+        field: &Rc<Field<T>>,
+    ) -> Vec<Vec<T>> {
+        let mut out = Vec::new();
         for _ in 0..polys.len() {
-            let mut v = vec![BigInt::from(0); domain.len()];
+            let mut v = vec![T::zero(); domain.len()];
             v.reserve(5);
             out.push(v);
         }
-        let mut scratch1 = BigInt::from(0);
-        let mut scratch2 = BigInt::from(0);
+        let mut scratch1 = T::zero();
+        let mut scratch2 = T::zero();
         Self::eval_fft_batch_(
             polys,
             domain,
@@ -322,23 +318,23 @@ impl Polynomial {
         out
     }
 
-    pub fn eval_fft(coefs: &Vec<BigInt>, domain: &Vec<BigInt>, field: &Rc<Field>) -> Vec<BigInt> {
-        let mut out = vec![BigInt::from(0); domain.len()];
+    pub fn eval_fft(coefs: &Vec<T>, domain: &Vec<T>, field: &Rc<Field<T>>) -> Vec<T> {
+        let mut out = vec![T::zero(); domain.len()];
         Self::eval_fft_(coefs, domain, field, 1, 0, 0, domain.len() / 2, &mut out);
         out
     }
 
     pub fn eval_fft_batch_(
-        polys: &[Polynomial],
-        domain: &[BigInt],
-        field: &Rc<Field>,
+        polys: &[Polynomial<T>],
+        domain: &[T],
+        field: &Rc<Field<T>>,
         slice_len: usize,
         offset: usize,
         left_dest: usize,
         right_dest: usize,
-        out: &mut Vec<Vec<BigInt>>,
-        scratch1: &mut BigInt,
-        scratch2: &mut BigInt,
+        out: &mut Vec<Vec<T>>,
+        scratch1: &mut T,
+        scratch2: &mut T,
     ) {
         let out_size = domain.len() / slice_len;
 
@@ -382,21 +378,11 @@ impl Polynomial {
             for j in 0..out.len() {
                 let left_index = left_dest + i;
                 let right_index = right_dest + i;
-                // bring the values into the field using simple arithmetic
-                // instead of relying on modulus
-                // offers a small speedup
-                //
                 // use this complicated scratch system to avoid
                 // heap (de)allocations
                 *scratch1 = field.mul(&out[j][right_index], &domain[i * slice_len]);
-                *scratch2 = &out[j][left_index] - &(*scratch1);
-                if scratch2.sign() == Sign::Minus {
-                    *scratch2 += field.p();
-                }
-                out[j][left_index] += &(*scratch1);
-                if &out[j][left_index] > field.p() {
-                    out[j][left_index] -= field.p();
-                }
+                *scratch2 = out[j][left_index].sub(scratch1, field.p());
+                out[j][left_index] = out[j][left_index].add(scratch1, field.p());
                 out[j][right_index].clone_from(scratch2);
             }
         }
@@ -409,14 +395,14 @@ impl Polynomial {
     // measured improvement of ~10% compared to previous
     // approach
     pub fn eval_fft_(
-        coefs: &Vec<BigInt>,
-        domain: &Vec<BigInt>,
-        field: &Rc<Field>,
+        coefs: &Vec<T>,
+        domain: &Vec<T>,
+        field: &Rc<Field<T>>,
         slice_len: usize,
         offset: usize,
         left_dest: usize,
         right_dest: usize,
-        out: &mut Vec<BigInt>,
+        out: &mut Vec<T>,
     ) {
         let out_size = domain.len() / slice_len;
 
@@ -450,46 +436,37 @@ impl Polynomial {
         );
 
         for i in 0..(out_size / 2) {
-            let mut left_out;
-            let mut right_out;
+            let left_out;
+            let right_out;
             {
-                let x = &(&*out)[left_dest + i];
-                let y = &(&*out)[right_dest + i];
+                let x = &out[left_dest + i];
+                let y = &out[right_dest + i];
                 let y_root = field.mul(y, &domain[i * slice_len]);
-                // bring the values into the field using simple arithmetic
-                // instead of relying on modulus
-                // offers a small speedup
-                left_out = x + &y_root;
-                if &left_out > field.p() {
-                    left_out -= field.p();
-                }
-                right_out = x - &y_root;
-                if &y_root > x {
-                    right_out += field.p();
-                }
+                left_out = x.add(&y_root, field.p());
+                right_out = x.sub(&y_root, field.p());
             }
             out[left_dest + i] = left_out;
             out[right_dest + i] = right_out;
         }
     }
 
-    pub fn eval_fft_inv(
-        coefs: &Vec<BigInt>,
-        domain_inv: &Vec<BigInt>,
-        field: &Rc<Field>,
-    ) -> Vec<BigInt> {
+    pub fn eval_fft_inv(coefs: &Vec<T>, domain_inv: &Vec<T>, field: &Rc<Field<T>>) -> Vec<T> {
         if coefs.len() == 1 {
             return vec![coefs[0].clone()];
         }
-        let len_inv = field.inv(&BigInt::from(u32::try_from(coefs.len()).unwrap()));
-        let out = Self::eval_fft(coefs, &domain_inv, field);
-        out.iter().map(|v| field.mul(&v, &len_inv)).collect()
+        let len_inv = field.inv(&T::from_u32(u32::try_from(coefs.len()).unwrap()));
+        let out = Self::eval_fft(coefs, domain_inv, field);
+        out.into_iter().map(|v| field.mul(&v, &len_inv)).collect()
     }
 
-    pub fn mul_fft(poly1: &Polynomial, poly2: &Polynomial, field: &Rc<Field>) -> Polynomial {
+    pub fn mul_fft(
+        poly1: &Polynomial<T>,
+        poly2: &Polynomial<T>,
+        field: &Rc<Field<T>>,
+    ) -> Polynomial<T> {
         if poly1.degree() < 4 || poly2.degree() < 4 {
             let mut o = poly1.clone();
-            o.mul(&poly2);
+            o.mul(poly2);
             return o;
         }
         let out_degree = 2 * std::cmp::max(poly1.degree(), poly2.degree());
@@ -500,7 +477,7 @@ impl Polynomial {
         let x1 = Self::eval_fft(poly1.coefs(), &domain, field);
         let x2 = Self::eval_fft(poly2.coefs(), &domain, field);
 
-        let mut x3: Vec<BigInt> = Vec::new();
+        let mut x3 = Vec::new();
         for i in 0..domain.len() {
             x3.push(field.mul(&x1[i], &x2[i]));
         }
@@ -516,13 +493,13 @@ impl Polynomial {
     }
 
     pub fn div_coset(
-        poly1: &Polynomial,
-        poly2: &Polynomial,
-        offset: &BigInt,
-        generator: &BigInt,
+        poly1: &Polynomial<T>,
+        poly2: &Polynomial<T>,
+        offset: &T,
+        generator: &T,
         size: u32,
-        field: &Rc<Field>,
-    ) -> Polynomial {
+        field: &Rc<Field<T>>,
+    ) -> Polynomial<T> {
         if poly1.is_zero() {
             return Polynomial::new(field);
         }
@@ -545,12 +522,12 @@ impl Polynomial {
         let g_inv = field.inv(&g);
         let domain = field.domain(&g, order);
         let domain_inv = field.domain(&g_inv, order);
-        let offset_domain = field.domain(&offset, order);
+        let offset_domain = field.domain(offset, order);
 
         let mut poly1_scaled = poly1.clone();
-        poly1_scaled.scale_precalc(&offset, &offset_domain);
+        poly1_scaled.scale_precalc(offset, &offset_domain);
         let mut poly2_scaled = poly2.clone();
-        poly2_scaled.scale_precalc(&offset, &offset_domain);
+        poly2_scaled.scale_precalc(offset, &offset_domain);
 
         let poly1_codeword = Self::eval_fft(poly1_scaled.coefs(), &domain, field);
         let poly2_codeword = Self::eval_fft(poly2_scaled.coefs(), &domain, field);
@@ -560,7 +537,7 @@ impl Polynomial {
         let out = poly1_codeword
             .iter()
             .enumerate()
-            .map(|(i, val)| field.mul(&val, &poly2_codeword_inv[i]))
+            .map(|(i, val)| field.mul(val, &poly2_codeword_inv[i]))
             .collect();
 
         let scaled_coefs = Self::eval_fft_inv(&out, &domain_inv, field);
@@ -568,7 +545,7 @@ impl Polynomial {
         for i in 0..(poly1.degree() - poly2.degree() + 1) {
             scaled_poly.term(&scaled_coefs[i], u32::try_from(i).unwrap());
         }
-        let offset_inv = field.inv(&offset);
+        let offset_inv = field.inv(offset);
         let offset_domain_inv = field.domain(&offset_inv, order);
         scaled_poly.scale_precalc(&offset_inv, &offset_domain_inv);
         scaled_poly
@@ -576,7 +553,7 @@ impl Polynomial {
 
     // remove and return the largest non-zero coefficient
     // coef, exp
-    pub fn pop_term(&mut self) -> (BigInt, usize) {
+    pub fn pop_term(&mut self) -> (T, usize) {
         let zero = Field::zero();
         for i in 0..self.coefs.len() {
             let index = (self.coefs.len() - 1) - i;
@@ -586,10 +563,10 @@ impl Polynomial {
                 return (out, index);
             }
         }
-        return (zero, 0);
+        (zero, 0)
     }
 
-    pub fn safe_div(&self, divisor: &Polynomial) -> Polynomial {
+    pub fn safe_div(&self, divisor: &Polynomial<T>) -> Polynomial<T> {
         let (q, r) = self.div(divisor);
         if !r.is_zero() {
             panic!("non-zero remainder in division");
@@ -597,7 +574,7 @@ impl Polynomial {
         q
     }
 
-    pub fn div(&self, divisor: &Polynomial) -> (Polynomial, Polynomial) {
+    pub fn div(&self, divisor: &Polynomial<T>) -> (Polynomial<T>, Polynomial<T>) {
         if divisor.is_zero() {
             panic!("divide by zero");
         }
@@ -618,26 +595,26 @@ impl Polynomial {
         (q, inter)
     }
 
-    pub fn lagrange(x_vals: &Vec<BigInt>, y_vals: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
+    pub fn lagrange(x_vals: &Vec<T>, y_vals: &Vec<T>, field: &Rc<Field<T>>) -> Polynomial<T> {
         if x_vals.len() != y_vals.len() {
             panic!("lagrange mismatch x/y array length");
         }
         let mut numerator = Polynomial::new(field);
-        numerator.term(&field.bigint(1), 0);
+        numerator.term(&T::one(), 0);
         for v in x_vals {
             let mut poly = Polynomial::new(field);
             poly.term(&field.bigint(1), 1);
-            poly.term(&field.neg(&v), 0);
+            poly.term(&field.neg(v), 0);
             numerator.mul(&poly);
         }
-        let mut polynomials: Vec<Polynomial> = Vec::new();
+        let mut polynomials = Vec::new();
         for i in 0..x_vals.len() {
             let mut denominator = Field::one();
             for j in 0..x_vals.len() {
                 if i == j {
                     continue;
                 }
-                denominator = field.mul(&denominator, &(&x_vals[i] - &x_vals[j]));
+                denominator = field.mul(&denominator, &x_vals[i].sub(&x_vals[j], field.p()));
             }
             let mut n = Polynomial::new(field);
             n.term(&field.bigint(1), 1);
@@ -654,22 +631,22 @@ impl Polynomial {
     }
 
     pub fn interpolate_fft(
-        x_vals: &Vec<BigInt>,
-        y_vals: &Vec<BigInt>,
-        field: &Rc<Field>,
-    ) -> Polynomial {
+        x_vals: &Vec<T>,
+        y_vals: &Vec<T>,
+        field: &Rc<Field<T>>,
+    ) -> Polynomial<T> {
         Self::interpolate_fft_slice(&x_vals[0..], &y_vals[0..], field)
     }
 
     pub fn interpolate_fft_slice(
-        x_vals: &[BigInt],
-        y_vals: &[BigInt],
-        field: &Rc<Field>,
-    ) -> Polynomial {
+        x_vals: &[T],
+        y_vals: &[T],
+        field: &Rc<Field<T>>,
+    ) -> Polynomial<T> {
         if x_vals.len() != y_vals.len() {
             panic!("x/y len mismatch");
         }
-        if x_vals.len() == 0 {
+        if x_vals.is_empty() {
             return Polynomial::new(field);
         }
         if x_vals.len() == 1 {
@@ -692,12 +669,12 @@ impl Polynomial {
             .iter()
             .enumerate()
             .map(|(i, v)| field.mul(v, &left_offset_inv[i]))
-            .collect::<Vec<BigInt>>();
+            .collect::<Vec<T>>();
         let right_targets = y_vals[half..]
             .iter()
             .enumerate()
             .map(|(i, v)| field.mul(v, &right_offset_inv[i]))
-            .collect::<Vec<BigInt>>();
+            .collect::<Vec<T>>();
 
         let mut left_interpolant =
             Self::interpolate_fft_slice(&x_vals[0..half], &left_targets[0..], field);
@@ -711,11 +688,11 @@ impl Polynomial {
     }
 
     pub fn interpolate_fft_batch(
-        x_vals: &[BigInt],
-        y_vals: &[Vec<BigInt>],
-        field: &Rc<Field>,
-    ) -> Vec<Polynomial> {
-        if x_vals.len() == 0 {
+        x_vals: &[T],
+        y_vals: &[Vec<T>],
+        field: &Rc<Field<T>>,
+    ) -> Vec<Polynomial<T>> {
+        if x_vals.is_empty() {
             return vec![Polynomial::new(field)];
         }
         if x_vals.len() == 1 {
@@ -736,27 +713,27 @@ impl Polynomial {
         let left_offset = right_zeroifier.eval_batch_fast_slice(&x_vals[0..half]);
         let right_offset = left_zeroifier.eval_batch_fast_slice(&x_vals[half..]);
 
-        let left_offset_invs: Vec<BigInt> = left_offset.iter().map(|v| field.inv(&v)).collect();
-        let right_offset_invs: Vec<BigInt> = right_offset.iter().map(|v| field.inv(&v)).collect();
+        let left_offset_invs: Vec<T> = left_offset.iter().map(|v| field.inv(v)).collect();
+        let right_offset_invs: Vec<T> = right_offset.iter().map(|v| field.inv(v)).collect();
 
-        let left_targets: Vec<Vec<BigInt>> = y_vals
+        let left_targets: Vec<Vec<T>> = y_vals
             .iter()
             .map(|vals| {
                 vals[0..half]
                     .iter()
                     .enumerate()
                     .map(|(i, v)| field.mul(v, &left_offset_invs[i]))
-                    .collect::<Vec<BigInt>>()
+                    .collect::<Vec<T>>()
             })
             .collect();
-        let right_targets: Vec<Vec<BigInt>> = y_vals
+        let right_targets: Vec<Vec<T>> = y_vals
             .iter()
             .map(|vals| {
                 vals[half..]
                     .iter()
                     .enumerate()
                     .map(|(i, v)| field.mul(v, &right_offset_invs[i]))
-                    .collect::<Vec<BigInt>>()
+                    .collect::<Vec<T>>()
             })
             .collect();
 
@@ -765,10 +742,10 @@ impl Polynomial {
         let right_interpolant =
             Self::interpolate_fft_batch(&x_vals[half..], &right_targets[0..], field);
 
-        let mut out: Vec<Polynomial> = Vec::new();
+        let mut out = Vec::new();
         for i in 0..left_interpolant.len() {
-            let mut left = Polynomial::mul_fft(&left_interpolant[i], &right_zeroifier, &field);
-            let right = Polynomial::mul_fft(&right_interpolant[i], &left_zeroifier, &field);
+            let mut left = Polynomial::mul_fft(&left_interpolant[i], &right_zeroifier, field);
+            let right = Polynomial::mul_fft(&right_interpolant[i], &left_zeroifier, field);
             left.add(&right);
             out.push(left);
         }
@@ -776,11 +753,11 @@ impl Polynomial {
     }
 
     pub fn test_colinearity_batch(
-        x_vals_arr: &Vec<Vec<BigInt>>,
-        y_vals_arr: &Vec<Vec<BigInt>>,
-        field: &Rc<Field>,
+        x_vals_arr: &[Vec<T>],
+        y_vals_arr: &[Vec<T>],
+        field: &Rc<Field<T>>,
     ) -> bool {
-        let mut to_inv: Vec<BigInt> = Vec::new();
+        let mut to_inv = Vec::new();
         for x_vals in x_vals_arr {
             to_inv.push(field.sub(&x_vals[1], &x_vals[0]));
             to_inv.push(field.sub(&x_vals[2], &x_vals[1]));
@@ -797,50 +774,50 @@ impl Polynomial {
                 return false;
             }
         }
-        return true;
+        true
     }
 
-    pub fn test_colinearity(x_vals: &Vec<BigInt>, y_vals: &Vec<BigInt>, field: &Rc<Field>) -> bool {
+    pub fn test_colinearity(x_vals: &Vec<T>, y_vals: &Vec<T>, field: &Rc<Field<T>>) -> bool {
         let x_diff_1 = field.sub(&x_vals[1], &x_vals[0]);
         let y_diff_1 = field.sub(&y_vals[1], &y_vals[0]);
         let slope_1 = field.div(&y_diff_1, &x_diff_1);
         let x_diff_2 = field.sub(&x_vals[2], &x_vals[1]);
         let y_diff_2 = field.sub(&y_vals[2], &y_vals[1]);
         let slope_2 = field.div(&y_diff_2, &x_diff_2);
-        return slope_1 == slope_2;
+        slope_1 == slope_2
     }
 
-    pub fn zeroifier_fft(points: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
+    pub fn zeroifier_fft(points: &Vec<T>, field: &Rc<Field<T>>) -> Polynomial<T> {
         Self::zeroifier_fft_slice(&points[0..], field)
     }
 
-    pub fn zeroifier_fft_slice(points: &[BigInt], field: &Rc<Field>) -> Polynomial {
-        if points.len() == 0 {
+    pub fn zeroifier_fft_slice(points: &[T], field: &Rc<Field<T>>) -> Polynomial<T> {
+        if points.is_empty() {
             return Polynomial::new(field);
         }
         if points.len() == 1 {
             let mut p = Polynomial::new(field);
             p.term(&field.neg(&points[0]), 0);
-            p.term(&BigInt::from(1), 1);
+            p.term(&T::one(), 1);
             return p;
         }
         let half = points.len() >> 1;
         let left = Self::zeroifier_fft_slice(&points[0..(half)], field);
         let right = Self::zeroifier_fft_slice(&points[(half)..], field);
-        return Self::mul_fft(&left, &right, field);
+        Self::mul_fft(&left, &right, field)
     }
 
-    pub fn zeroifier(points: &Vec<BigInt>, field: &Rc<Field>) -> Polynomial {
+    pub fn zeroifier(points: &Vec<T>, field: &Rc<Field<T>>) -> Polynomial<T> {
         Self::zeroifier_slice(&points[0..], field)
     }
 
-    pub fn zeroifier_slice(points: &[BigInt], field: &Rc<Field>) -> Polynomial {
+    pub fn zeroifier_slice(points: &[T], field: &Rc<Field<T>>) -> Polynomial<T> {
         let mut out = Polynomial::new(field);
-        out.term(&BigInt::from(1), 0);
+        out.term(&T::one(), 0);
         let mut x = Polynomial::new(field);
-        x.term(&BigInt::from(1), 1);
+        x.term(&T::one(), 1);
         for p in points {
-            out.mul(&x.clone().term(&field.neg(&p), 0));
+            out.mul(x.clone().term(&field.neg(p), 0));
         }
         out
     }
@@ -848,22 +825,26 @@ impl Polynomial {
 
 #[cfg(test)]
 mod tests {
+    use num_bigint::BigInt;
+
+    use crate::BigIntElement;
+
     use super::*;
 
     #[test]
     fn should_test_colinearity() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigInt::from(-9), 0);
-        poly.term(&BigInt::from(2), 1);
-        let mut x_vals: Vec<BigInt> = Vec::new();
-        let mut y_vals: Vec<BigInt> = Vec::new();
+        poly.term(&BigIntElement(BigInt::from(-9)), 0);
+        poly.term(&BigIntElement(BigInt::from(2)), 1);
+        let mut x_vals = Vec::new();
+        let mut y_vals = Vec::new();
         for i in 0..3 {
-            x_vals.push(BigInt::from(i));
-            y_vals.push(poly.eval(&BigInt::from(i)));
+            x_vals.push(BigIntElement::from_i32(i));
+            y_vals.push(poly.eval(&BigIntElement::from_i32(i)));
         }
         assert!(Polynomial::test_colinearity(&x_vals, &y_vals, &f));
         assert!(Polynomial::test_colinearity_batch(
@@ -875,26 +856,26 @@ mod tests {
 
     #[test]
     fn should_compose_polynomial() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let mut root = Polynomial::new(&f);
-        root.term(&BigInt::from(99), 0);
-        root.term(&BigInt::from(2), 1);
-        root.term(&BigInt::from(4), 2);
+        root.term(&BigIntElement(BigInt::from(99)), 0);
+        root.term(&BigIntElement(BigInt::from(2)), 1);
+        root.term(&BigIntElement(BigInt::from(4)), 2);
 
         let mut inpoly = Polynomial::new(&f);
-        inpoly.term(&BigInt::from(2), 2);
-        inpoly.term(&BigInt::from(12), 0);
+        inpoly.term(&BigIntElement(BigInt::from(2)), 2);
+        inpoly.term(&BigIntElement(BigInt::from(12)), 0);
 
         let mut expected = Polynomial::new(&f);
-        expected.term(&BigInt::from(99), 0);
-        expected.add(&inpoly.clone().mul_scalar(&BigInt::from(2)));
+        expected.term(&BigIntElement(BigInt::from(99)), 0);
+        expected.add(&inpoly.clone().mul_scalar(&BigIntElement(BigInt::from(2))));
         {
             let mut i = inpoly.clone();
             i.exp(2);
-            i.mul_scalar(&BigInt::from(4));
+            i.mul_scalar(&BigIntElement(BigInt::from(4)));
             expected.add(&i);
         }
 
@@ -903,24 +884,30 @@ mod tests {
 
     #[test]
     fn should_exp_polynomial() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigInt::from(2), 0);
+        poly.term(&BigIntElement(BigInt::from(2)), 0);
 
         for i in 0..10 {
             let mut expected = Polynomial::new(&f);
-            expected.term(&f.exp(&BigInt::from(2), &BigInt::from(i)), 0);
+            expected.term(
+                &f.exp(
+                    &BigIntElement(BigInt::from(2)),
+                    &BigIntElement(BigInt::from(i)),
+                ),
+                0,
+            );
             assert!(poly.clone().exp(i).is_equal(&expected));
         }
     }
 
     #[test]
     fn should_scale_polynomial() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
@@ -937,19 +924,19 @@ mod tests {
         expected.term(&f.bigint(8), 3);
         expected.term(&f.bigint(16), 4);
 
-        assert!(expected.is_equal(poly.scale(&BigInt::from(2))));
+        assert!(expected.is_equal(poly.scale(BigIntElement(BigInt::from(2)))));
     }
 
     #[test]
     fn should_interpolate_lagrange() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let size = 32;
-        let gen = f.generator(&f.bigint(size));
-        let mut x_vals: Vec<BigInt> = Vec::new();
-        let mut y_vals: Vec<BigInt> = Vec::new();
+        let gen = f.generator(f.bigint(size));
+        let mut x_vals = Vec::new();
+        let mut y_vals = Vec::new();
         for i in 0..size {
             x_vals.push(f.exp(&gen, &f.bigint(i)));
             y_vals.push(f.random());
@@ -965,8 +952,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn should_fail_to_div_by_zero() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
@@ -979,8 +966,8 @@ mod tests {
 
     #[test]
     fn should_divide_polynomial() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly1 = Polynomial::new(&f);
@@ -1007,8 +994,8 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         // 9x^3 - 4x^2 - 20
@@ -1023,8 +1010,8 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial_with_batch_fast() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
@@ -1033,9 +1020,9 @@ mod tests {
         }
 
         let size = 2_u32.pow(7);
-        let mut g_domain: Vec<BigInt> = Vec::new();
+        let mut g_domain = Vec::new();
         for i in 0..size {
-            g_domain.push(BigInt::from(i));
+            g_domain.push(BigIntElement::from_u32(i));
         }
 
         let actual = poly.eval_batch(&g_domain);
@@ -1047,8 +1034,8 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial_with_fft() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
@@ -1057,10 +1044,10 @@ mod tests {
         }
 
         let size = 2_u32.pow(8);
-        let sub_g = f.generator(&BigInt::from(size));
-        let mut g_domain: Vec<BigInt> = Vec::new();
+        let sub_g = f.generator(BigIntElement::from_u32(size));
+        let mut g_domain = Vec::new();
         for i in 0..size {
-            g_domain.push(f.exp(&sub_g, &BigInt::from(i)));
+            g_domain.push(f.exp(&sub_g, &BigIntElement::from_u32(i)));
         }
 
         let actual = poly.eval_batch(&g_domain);
@@ -1072,8 +1059,8 @@ mod tests {
 
     #[test]
     fn should_check_polynomial_equality() {
-        let p = BigInt::from(101);
-        let g = BigInt::from(0);
+        let p = BigIntElement(BigInt::from(101));
+        let g = BigIntElement(BigInt::from(0));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly1 = Polynomial::new(&f);
@@ -1088,8 +1075,8 @@ mod tests {
 
     #[test]
     fn should_add_polynomials() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         // 2x^2 - 20
@@ -1119,8 +1106,8 @@ mod tests {
 
     #[test]
     fn should_subtract_polynomials() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         // 2x^2 - 20
@@ -1142,6 +1129,8 @@ mod tests {
         let mut expected1 = Polynomial::new(&f);
         expected1.term(&f.bigint(-9), 3);
         expected1.term(&f.bigint(6), 2);
+        println!("expected1=={:?}", expected1.coefs());
+        println!("out1=={:?}", out1.coefs());
         assert!(expected1.is_equal(&out1));
 
         let mut expected2 = Polynomial::new(&f);
@@ -1152,8 +1141,8 @@ mod tests {
 
     #[test]
     fn should_multiply_polynomials() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         // 2x^2 - 20
@@ -1181,8 +1170,8 @@ mod tests {
 
     #[test]
     fn should_multiply_polynomials_fft() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly1 = Polynomial::new(&f);
@@ -1201,26 +1190,26 @@ mod tests {
 
     #[test]
     fn should_build_zeroifier_polynomial() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let s = 128;
-        let size = BigInt::from(s);
-        let domain_g = f.generator(&size);
-        let mut domain: Vec<BigInt> = Vec::new();
+        let size = BigIntElement(BigInt::from(s));
+        let domain_g = f.generator(size);
+        let mut domain = Vec::new();
         for i in 0..s {
-            domain.push(f.exp(&domain_g, &BigInt::from(i)));
+            domain.push(f.exp(&domain_g, &BigIntElement(BigInt::from(i))));
         }
 
         let poly = Polynomial::zeroifier(&domain, &f);
         for i in 0..s {
-            assert_eq!(poly.eval(&domain[i]), BigInt::from(0));
+            assert_eq!(poly.eval(&domain[i]), BigIntElement::zero());
         }
 
         let mut is_zero = true;
         for i in poly.coefs() {
-            if i != &BigInt::from(0) {
+            if i != &BigIntElement::zero() {
                 is_zero = false;
             }
         }
@@ -1229,20 +1218,20 @@ mod tests {
 
     #[test]
     fn should_build_zeroifier_polynomial_domain() {
-        let p = BigInt::from(3221225473_u32);
-        let g = BigInt::from(5);
+        let p = BigIntElement(BigInt::from(3221225473_u32));
+        let g = BigIntElement(BigInt::from(5));
         let f = Rc::new(Field::new(p, g));
 
         let size = 128_u32;
-        let generator = f.generator(&BigInt::from(size));
+        let generator = f.generator(BigIntElement::from_u32(size));
         let domain = f.domain(&generator, size);
         let zeroifier = Polynomial::zeroifier(&domain, &f);
         let mut zeroifier_fft = Polynomial::zeroifier_fft(&domain, &f);
         zeroifier_fft.trim();
 
         for v in domain {
-            assert_eq!(BigInt::from(0), zeroifier_fft.eval(&v));
-            assert_eq!(BigInt::from(0), zeroifier.eval(&v));
+            assert_eq!(BigIntElement::zero(), zeroifier_fft.eval(&v));
+            assert_eq!(BigIntElement::zero(), zeroifier.eval(&v));
         }
 
         assert!(zeroifier.is_equal(&zeroifier_fft));

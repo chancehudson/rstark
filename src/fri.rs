@@ -2,32 +2,31 @@ use crate::channel::Channel;
 use crate::field::Field;
 use crate::polynomial::Polynomial;
 use crate::tree::Tree;
-use num_bigint::ToBigInt;
-use num_bigint::{BigInt, BigUint, Sign};
+use crate::FieldElement;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub struct FriOptions {
-    pub offset: BigInt,
-    pub omega: BigInt,
+pub struct FriOptions<T: FieldElement> {
+    pub offset: T,
+    pub omega: T,
     pub domain_len: u32,
     pub expansion_factor: u32,
     pub colinearity_test_count: u32,
 }
 
-pub struct Fri {
-    pub offset: BigInt,
-    pub omega: BigInt,
+pub struct Fri<T: FieldElement> {
+    pub offset: T,
+    pub omega: T,
     pub domain_len: u32,
-    pub field: Rc<Field>,
+    pub field: Rc<Field<T>>,
     pub expansion_factor: u32,
     pub colinearity_test_count: u32,
-    domain: Vec<BigInt>,
+    domain: Vec<T>,
     round_count: u32,
 }
 
-impl Fri {
-    pub fn new(options: &FriOptions, field: &Rc<Field>) -> Fri {
+impl<T: FieldElement> Fri<T> {
+    pub fn new(options: &FriOptions<T>, field: &Rc<Field<T>>) -> Fri<T> {
         // calculate number of rounds
         let mut codeword_len = options.domain_len;
         let mut round_count = 0;
@@ -49,7 +48,7 @@ impl Fri {
         }
     }
 
-    pub fn domain(&self) -> &Vec<BigInt> {
+    pub fn domain(&self) -> &Vec<T> {
         &self.domain
     }
 
@@ -57,7 +56,7 @@ impl Fri {
         self.round_count
     }
 
-    pub fn prove(&self, codeword: &Vec<BigUint>, channel: &mut Channel) -> Vec<u32> {
+    pub fn prove(&self, codeword: &Vec<T>, channel: &mut Channel) -> Vec<u32> {
         if self.domain_len != u32::try_from(codeword.len()).unwrap() {
             panic!("initial codeword does not match domain len");
         }
@@ -69,7 +68,17 @@ impl Fri {
             self.colinearity_test_count,
         );
         let mut indices: Vec<u32> = top_indices.clone();
-        let codeword_trees: Vec<Tree> = codewords.iter().map(|word| Tree::build(word)).collect();
+        let codeword_trees: Vec<Tree<T>> = codewords
+            .iter()
+            .map(|word| {
+                Tree::build(
+                    &word
+                        .iter()
+                        .map(|t| t.to_bytes_le_sized())
+                        .collect::<Vec<[u8; 32]>>(),
+                )
+            })
+            .collect();
         for i in 0..(codewords.len() - 1) {
             indices = indices
                 .iter()
@@ -89,12 +98,12 @@ impl Fri {
 
     fn query(
         &self,
-        current_codeword: &Vec<BigUint>,
-        next_codeword: &Vec<BigUint>,
-        indices_c: &Vec<u32>,
+        current_codeword: &Vec<T>,
+        next_codeword: &[T],
+        indices_c: &[u32],
         channel: &mut Channel,
-        current_codeword_tree: &Tree,
-        next_codeword_tree: &Tree,
+        current_codeword_tree: &Tree<T>,
+        next_codeword_tree: &Tree<T>,
     ) {
         let indices_a: Vec<u32> = indices_c.to_vec();
         let indices_b: Vec<u32> = indices_c
@@ -102,10 +111,10 @@ impl Fri {
             .map(|val| val + ((current_codeword.len() >> 1) as u32))
             .collect();
         for i in 0..usize::try_from(self.colinearity_test_count).unwrap() {
-            channel.push(&vec![
-                current_codeword[usize::try_from(indices_a[i]).unwrap()].clone(),
-                current_codeword[usize::try_from(indices_b[i]).unwrap()].clone(),
-                next_codeword[usize::try_from(indices_c[i]).unwrap()].clone(),
+            channel.push(&[
+                current_codeword[usize::try_from(indices_a[i]).unwrap()].to_bytes_le_sized(),
+                current_codeword[usize::try_from(indices_b[i]).unwrap()].to_bytes_le_sized(),
+                next_codeword[usize::try_from(indices_c[i]).unwrap()].to_bytes_le_sized(),
             ]);
         }
         for i in 0..usize::try_from(self.colinearity_test_count).unwrap() {
@@ -115,10 +124,10 @@ impl Fri {
         }
     }
 
-    fn commit(&self, codeword: &Vec<BigUint>, channel: &mut Channel) -> Vec<Vec<BigUint>> {
-        let mut codewords: Vec<Vec<BigUint>> = Vec::new();
-        let mut codeword = codeword.clone();
-        let two_inv = self.field.inv(&BigInt::from(2));
+    fn commit(&self, codeword: &[T], channel: &mut Channel) -> Vec<Vec<T>> {
+        let mut codewords = Vec::new();
+        let mut codeword = codeword.to_owned();
+        let two_inv = self.field.inv(&T::two());
 
         // invert the entire domain using repeated multiplications
         // e.g. 1/4 = (1/2) * (1/2)
@@ -134,7 +143,7 @@ impl Fri {
         let mut exp: usize = 1;
 
         for x in 0..self.round_count() {
-            let root = Tree::commit(&codeword);
+            let root = Tree::commit_elements(&codeword);
             channel.push_single(&root);
             if x == self.round_count() - 1 {
                 break;
@@ -143,48 +152,48 @@ impl Fri {
             // now split the last codeword and fold into a set
             // of points from a polynomial of half the degree
             // of the previous codewords, similar to a FFT
-            let alpha = self
-                .field
-                .sample(&channel.prover_hash().to_bigint().unwrap());
+            let alpha = self.field.sample_bytes(&channel.prover_hash());
+
             let next_len = codeword.len() >> 1;
             codeword = codeword[0..next_len]
                 .iter()
                 .enumerate()
                 .map(|(index, val)| {
-                    let ival = val.to_bigint().unwrap();
                     let inv_omega = self
                         .field
                         .mul(&inv_offset_domain[exp], &inv_domain[exp * index]);
                     // ( (one + alpha / (offset * (omega^i)) ) * codeword[i]
                     let a = self.field.mul(
-                        &ival,
+                        val,
                         &self
                             .field
-                            .ladd(&Field::one(), &self.field.lmul(&alpha, &inv_omega)),
+                            .add(&Field::one(), &self.field.mul(&alpha, &inv_omega)),
                     );
                     //  (one - alpha / (offset * (omega^i)) ) * codeword[len(codeword)//2 + i] ) for i in range(len(codeword)//2)]
                     let b = self.field.mul(
                         &self
                             .field
-                            .lsub(&Field::one(), &self.field.lmul(&alpha, &inv_omega)),
-                        &codeword[(codeword.len() >> 1) + index].to_bigint().unwrap(),
+                            .sub(&Field::one(), &self.field.mul(&alpha, &inv_omega)),
+                        &codeword[(codeword.len() >> 1) + index],
                     );
-                    return self
-                        .field
-                        .mul(&two_inv, &self.field.ladd(&a, &b))
-                        .to_biguint()
-                        .unwrap();
+                    self.field.mul(&two_inv, &self.field.add(&a, &b))
                 })
                 .collect();
 
             exp *= 2;
         }
-        channel.push(&codeword);
+
+        channel.push(
+            &codeword
+                .iter()
+                .map(|t| t.to_bytes_le_sized())
+                .collect::<Vec<[u8; 32]>>(),
+        );
         codewords.push(codeword);
         codewords
     }
 
-    fn sample_indices(seed: &BigUint, size: u32, reduced_size: u32, count: u32) -> Vec<u32> {
+    fn sample_indices(seed: &[u8; 32], size: u32, reduced_size: u32, count: u32) -> Vec<u32> {
         if count > 2 * reduced_size {
             panic!("not enough entropy");
         }
@@ -197,39 +206,34 @@ impl Fri {
         let mut counter: u32 = 0;
         while indices.len() < (count as usize) {
             let mut hasher = blake3::Hasher::new();
-            hasher.update(&seed.to_bytes_le());
-            hasher.update(&BigUint::from(counter).to_bytes_le());
-            let v = BigInt::from_bytes_le(Sign::Plus, hasher.finalize().as_bytes());
-            let index = Field::bigint_to_u32(&(v % BigInt::from(size)));
+            hasher.update(seed);
+            hasher.update(&T::from_u32(counter).to_bytes_le());
+            let v = T::from_bytes_le(hasher.finalize().as_bytes());
+            let index = v.modd(&T::from_u32(size)).to_u32();
             let reduced_index = index % reduced_size;
             counter += 1;
-            if !reduced_indices.contains_key(&reduced_index) {
+            reduced_indices.entry(reduced_index).or_insert_with(|| {
                 indices.push(index);
-                reduced_indices.insert(reduced_index, true);
-            }
+                true
+            });
         }
         indices
     }
 
-    pub fn verify(&self, channel: &mut Channel) -> Vec<(u32, BigUint)> {
-        let mut out: Vec<(u32, BigUint)> = Vec::new();
+    pub fn verify(&self, channel: &mut Channel) -> Vec<(u32, T)> {
+        let mut out = Vec::new();
         let mut offset = self.offset.clone();
 
-        let mut roots: Vec<BigUint> = Vec::new();
-        let mut alphas: Vec<BigUint> = Vec::new();
+        let mut roots = Vec::new();
+        let mut alphas = Vec::new();
 
         for _ in 0..self.round_count() {
-            roots.push(channel.pull().data[0].clone());
-            alphas.push(
-                self.field
-                    .sample(&channel.verifier_hash().to_bigint().unwrap())
-                    .to_biguint()
-                    .unwrap(),
-            );
+            roots.push(channel.pull_root());
+            alphas.push(self.field.sample_bytes(&channel.verifier_hash()));
         }
 
-        let last_codeword = channel.pull().data.clone();
-        if roots[roots.len() - 1] != Tree::commit(&last_codeword) {
+        let last_codeword = channel.pull_path();
+        if roots[roots.len() - 1] != Tree::<T>::commit(&last_codeword) {
             panic!("last codeword root mismatch");
         }
 
@@ -245,7 +249,7 @@ impl Fri {
         if self.field.inv(&omega_domain[omega_start_index])
             != self.field.exp(
                 &omega_domain[omega_start_index],
-                &BigInt::from(last_codeword.len() - 1),
+                &T::from_u32((last_codeword.len() - 1) as u32),
             )
         {
             panic!("omega order incorrect");
@@ -255,22 +259,18 @@ impl Fri {
             .iter()
             .enumerate()
             .map(|(index, _)| {
-                return self
-                    .field
-                    .mul(&last_offset, &omega_domain[omega_start_index * index]);
+                self.field
+                    .mul(&last_offset, &omega_domain[omega_start_index * index])
             })
             .collect();
 
         let poly = Polynomial::interpolate_fft(
             &last_domain,
-            &last_codeword
-                .iter()
-                .map(|v| v.to_bigint().unwrap())
-                .collect(),
+            &last_codeword.iter().map(|v| T::from_bytes_le(v)).collect(),
             &self.field,
         );
         for i in 0..last_domain.len() {
-            if poly.eval(&last_domain[i]) != last_codeword[i].clone().to_bigint().unwrap() {
+            if poly.eval(&last_domain[i]) != T::from_bytes_le(&last_codeword[i]) {
                 panic!("interpolated polynomial is incorrect");
             }
         }
@@ -284,8 +284,8 @@ impl Fri {
             self.domain_len >> (self.round_count() - 1),
             self.colinearity_test_count,
         );
-        let mut colinearity_x_vals: Vec<Vec<BigInt>> = Vec::new();
-        let mut colinearity_y_vals: Vec<Vec<BigInt>> = Vec::new();
+        let mut colinearity_x_vals = Vec::new();
+        let mut colinearity_y_vals = Vec::new();
         let mut exp = 1;
         for i in 0..usize::try_from(self.round_count() - 1).unwrap() {
             let indices_c: Vec<u32> = top_indices
@@ -298,20 +298,20 @@ impl Fri {
                 .map(|val| val + (self.domain_len >> (i + 1)))
                 .collect();
 
-            let mut aa: Vec<BigUint> = Vec::new();
-            let mut bb: Vec<BigUint> = Vec::new();
-            let mut cc: Vec<BigUint> = Vec::new();
+            let mut aa = Vec::new();
+            let mut bb = Vec::new();
+            let mut cc = Vec::new();
             for j in 0..usize::try_from(self.colinearity_test_count).unwrap() {
-                let y_points_msg = channel.pull();
-                let ay = y_points_msg.data[0].clone();
-                let by = y_points_msg.data[1].clone();
-                let cy = y_points_msg.data[2].clone();
+                let y_points_msg = channel.pull_path();
+                let ay = T::from_bytes_le(&y_points_msg[0]);
+                let by = T::from_bytes_le(&y_points_msg[1]);
+                let cy = T::from_bytes_le(&y_points_msg[2]);
                 aa.push(ay.clone());
                 bb.push(by.clone());
                 cc.push(cy.clone());
                 if i == 0 {
-                    out.push((indices_a[j], y_points_msg.data[0].clone()));
-                    out.push((indices_b[j], y_points_msg.data[1].clone()));
+                    out.push((indices_a[j], ay.clone()));
+                    out.push((indices_b[j], by.clone()));
                 }
 
                 let index_a_usize = usize::try_from(indices_a[j]).unwrap();
@@ -325,14 +325,10 @@ impl Fri {
                     .mul(&offset, &omega_domain[exp * index_b_usize])
                     .clone();
 
-                let cx = alphas[usize::try_from(i).unwrap()].clone();
+                let cx = alphas[i].clone();
 
-                colinearity_x_vals.push(vec![ax, bx, cx.to_bigint().unwrap()]);
-                colinearity_y_vals.push(vec![
-                    ay.to_bigint().unwrap(),
-                    by.to_bigint().unwrap(),
-                    cy.to_bigint().unwrap(),
-                ]);
+                colinearity_x_vals.push(vec![ax, bx, cx]);
+                colinearity_y_vals.push(vec![ay, by, cy]);
             }
 
             if !Polynomial::test_colinearity_batch(
@@ -344,9 +340,24 @@ impl Fri {
             }
 
             for j in 0..usize::try_from(self.colinearity_test_count).unwrap() {
-                Tree::verify(&roots[i], indices_a[j], &channel.pull().data, &aa[j]);
-                Tree::verify(&roots[i], indices_b[j], &channel.pull().data, &bb[j]);
-                Tree::verify(&roots[i + 1], indices_c[j], &channel.pull().data, &cc[j]);
+                Tree::<T>::verify(
+                    &roots[i],
+                    indices_a[j],
+                    &channel.pull_path(),
+                    &aa[j].to_bytes_le_sized(),
+                );
+                Tree::<T>::verify(
+                    &roots[i],
+                    indices_b[j],
+                    &channel.pull_path(),
+                    &bb[j].to_bytes_le_sized(),
+                );
+                Tree::<T>::verify(
+                    &roots[i + 1],
+                    indices_c[j],
+                    &channel.pull_path(),
+                    &cc[j].to_bytes_le_sized(),
+                );
             }
 
             exp *= 2;
@@ -359,16 +370,20 @@ impl Fri {
 
 #[cfg(test)]
 mod tests {
+    use num_bigint::BigInt;
+
+    use crate::BigIntElement;
+
     use super::*;
 
     #[test]
     fn should_make_verify_fri_proof() {
         let mut channel = Channel::new();
-        let p = BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119);
-        let g = BigInt::from(85408008396924667383611388730472331217_u128);
+        let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
+        let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
         let f = Rc::new(Field::new(p, g.clone()));
         let domain_size: u32 = 8192;
-        let domain_g = f.generator(&BigInt::from(domain_size));
+        let domain_g = f.generator(BigIntElement::from_u32(domain_size));
 
         let fri = Fri::new(
             &FriOptions {
@@ -382,10 +397,10 @@ mod tests {
         );
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigInt::from(3), 2);
-        let mut points: Vec<BigUint> = Vec::new();
+        poly.term(&BigIntElement(BigInt::from(3)), 2);
+        let mut points = Vec::new();
         for i in fri.domain() {
-            points.push(poly.eval(&i).to_biguint().unwrap());
+            points.push(poly.eval(i));
         }
         fri.prove(&points, &mut channel);
         fri.verify(&mut channel);
