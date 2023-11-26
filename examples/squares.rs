@@ -1,13 +1,17 @@
+use crypto_bigint::U256;
 use num_bigint::BigInt;
 use rstark::field::Field;
 use rstark::mpolynomial::MPolynomial;
 use rstark::stark::Stark;
-use rstark::BigIntElement;
+use rstark::{to_u256, CryptoBigIntElement};
 use std::rc::Rc;
 
 fn main() {
-    let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
-    let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
+    // let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
+    // let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
+    let big_uint = BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119);
+    let p = CryptoBigIntElement(to_u256(big_uint));
+    let g = CryptoBigIntElement(U256::from_u128(85408008396924667383611388730472331217_u128));
     let f = Rc::new(Field::new(p, g.clone()));
 
     let register_count = 40;
@@ -15,10 +19,10 @@ fn main() {
     let stark = Stark::new(&g.clone(), &f, register_count, sequence_len, 32, 26, 2);
 
     let first_step = (0..register_count)
-        .map(|v| BigIntElement(2 + BigInt::from(v)))
+        .map(|v| CryptoBigIntElement(to_u256(2 + BigInt::from(v))))
         .collect();
 
-    let mut trace: Vec<Vec<BigIntElement>> = Vec::new();
+    let mut trace: Vec<Vec<CryptoBigIntElement>> = Vec::new();
     trace.push(first_step);
     while trace.len() < sequence_len.try_into().unwrap() {
         let last = &trace[trace.len() - 1];
@@ -43,7 +47,7 @@ fn main() {
     let _cycle_index = &variables[0];
     let prev_state = &variables[1..(1 + register_count_usize)];
     let next_state = &variables[(1 + register_count_usize)..];
-    let mut transition_constraints: Vec<MPolynomial<BigIntElement>> = Vec::new();
+    let mut transition_constraints: Vec<MPolynomial<CryptoBigIntElement>> = Vec::new();
     for i in 0..register_count_usize {
         let mut c = prev_state[i].clone();
         c.mul(&prev_state[i]);

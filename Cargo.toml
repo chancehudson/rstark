@@ -17,11 +17,19 @@ blake3 = "1.4.1"
 getrandom = { version = "0.2", features = ["js"] }
 num-bigint = { version = "0.4.3", features = ["rand", "serde"] }
 num-integer = "0.1.45"
+crypto-bigint = "0.5.5"
 rand = "0.8.5"
 serde = { version = "1.0.183", features = ["derive", "rc"] }
 serde-wasm-bindgen = "0.5.0"
 serde_json = { version = "1.0.105", features = [] }
 wasm-bindgen = { version = "0.2.87", features = [] }
 
+[dev-dependencies]
+criterion = "0.5.1"
+
 [profile.release]
 # opt-leve = "s"
+
+[[bench]]
+name = "stark"
+harness = false

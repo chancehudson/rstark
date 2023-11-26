@@ -2,12 +2,19 @@ use num_bigint::BigInt;
 use rstark::field::Field;
 use rstark::mpolynomial::MPolynomial;
 use rstark::stark::Stark;
-use rstark::{BigIntElement, FieldElement};
+use rstark::{to_u256, BigIntElement, CryptoBigIntElement, FieldElement};
 use std::rc::Rc;
 
 fn main() {
-    let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
-    let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
+    // let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
+    // let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
+    let p = CryptoBigIntElement(to_u256(
+        BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119),
+    ));
+    let g = CryptoBigIntElement(to_u256(BigInt::from(
+        85408008396924667383611388730472331217_u128,
+    )));
+
     let f = Rc::new(Field::new(p, g.clone()));
 
     let register_count = 3;
@@ -45,7 +52,8 @@ fn main() {
     let mut transition_constraints = Vec::new();
     {
         let mut one = MPolynomial::new(&f);
-        one.term(&BigIntElement::zero(), &vec![0]);
+        one.term(&CryptoBigIntElement::one(), &vec![0]);
+        // one.term(&BigIntElement::one(), &vec![0]);
         one.sub(
             &prev_state[2]
                 .clone()

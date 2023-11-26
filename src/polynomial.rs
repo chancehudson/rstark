@@ -827,24 +827,26 @@ impl<T: FieldElement> Polynomial<T> {
 mod tests {
     use num_bigint::BigInt;
 
-    use crate::BigIntElement;
+    use crate::{to_u256, CryptoBigIntElement};
 
     use super::*;
 
     #[test]
     fn should_test_colinearity() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
+        // let p = BigIntElement(BigInt::from(3221225473_u32));
+        // let g = BigIntElement(BigInt::from(5));
+        let f = Rc::new(Field::new(p.clone(), g));
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigIntElement(BigInt::from(-9)), 0);
-        poly.term(&BigIntElement(BigInt::from(2)), 1);
+        poly.term(&CryptoBigIntElement::from_i32(-9, &p), 0);
+        poly.term(&CryptoBigIntElement::from_u32(2), 1);
         let mut x_vals = Vec::new();
         let mut y_vals = Vec::new();
         for i in 0..3 {
-            x_vals.push(BigIntElement::from_i32(i));
-            y_vals.push(poly.eval(&BigIntElement::from_i32(i)));
+            x_vals.push(CryptoBigIntElement::from_u32(i));
+            y_vals.push(poly.eval(&CryptoBigIntElement::from_u32(i)));
         }
         assert!(Polynomial::test_colinearity(&x_vals, &y_vals, &f));
         assert!(Polynomial::test_colinearity_batch(
@@ -856,26 +858,30 @@ mod tests {
 
     #[test]
     fn should_compose_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let mut root = Polynomial::new(&f);
-        root.term(&BigIntElement(BigInt::from(99)), 0);
-        root.term(&BigIntElement(BigInt::from(2)), 1);
-        root.term(&BigIntElement(BigInt::from(4)), 2);
+        root.term(&CryptoBigIntElement(to_u256(BigInt::from(99))), 0);
+        root.term(&CryptoBigIntElement(to_u256(BigInt::from(2))), 1);
+        root.term(&CryptoBigIntElement(to_u256(BigInt::from(4))), 2);
 
         let mut inpoly = Polynomial::new(&f);
-        inpoly.term(&BigIntElement(BigInt::from(2)), 2);
-        inpoly.term(&BigIntElement(BigInt::from(12)), 0);
+        inpoly.term(&CryptoBigIntElement(to_u256(BigInt::from(2))), 2);
+        inpoly.term(&CryptoBigIntElement(to_u256(BigInt::from(12))), 0);
 
         let mut expected = Polynomial::new(&f);
-        expected.term(&BigIntElement(BigInt::from(99)), 0);
-        expected.add(&inpoly.clone().mul_scalar(&BigIntElement(BigInt::from(2))));
+        expected.term(&CryptoBigIntElement(to_u256(BigInt::from(99))), 0);
+        expected.add(
+            &inpoly
+                .clone()
+                .mul_scalar(&CryptoBigIntElement(to_u256(BigInt::from(2)))),
+        );
         {
             let mut i = inpoly.clone();
             i.exp(2);
-            i.mul_scalar(&BigIntElement(BigInt::from(4)));
+            i.mul_scalar(&CryptoBigIntElement(to_u256(BigInt::from(4))));
             expected.add(&i);
         }
 
@@ -884,19 +890,19 @@ mod tests {
 
     #[test]
     fn should_exp_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigIntElement(BigInt::from(2)), 0);
+        poly.term(&CryptoBigIntElement(to_u256(BigInt::from(2))), 0);
 
         for i in 0..10 {
             let mut expected = Polynomial::new(&f);
             expected.term(
                 &f.exp(
-                    &BigIntElement(BigInt::from(2)),
-                    &BigIntElement(BigInt::from(i)),
+                    &CryptoBigIntElement(to_u256(BigInt::from(2))),
+                    &CryptoBigIntElement(to_u256(BigInt::from(i))),
                 ),
                 0,
             );
@@ -906,8 +912,8 @@ mod tests {
 
     #[test]
     fn should_scale_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
@@ -924,13 +930,13 @@ mod tests {
         expected.term(&f.bigint(8), 3);
         expected.term(&f.bigint(16), 4);
 
-        assert!(expected.is_equal(poly.scale(BigIntElement(BigInt::from(2)))));
+        assert!(expected.is_equal(poly.scale(CryptoBigIntElement(to_u256(BigInt::from(2))))));
     }
 
     #[test]
     fn should_interpolate_lagrange() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let size = 32;
@@ -952,8 +958,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn should_fail_to_div_by_zero() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
@@ -966,8 +972,8 @@ mod tests {
 
     #[test]
     fn should_divide_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly1 = Polynomial::new(&f);
@@ -994,8 +1000,8 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         // 9x^3 - 4x^2 - 20
@@ -1010,8 +1016,8 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial_with_batch_fast() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
@@ -1022,7 +1028,7 @@ mod tests {
         let size = 2_u32.pow(7);
         let mut g_domain = Vec::new();
         for i in 0..size {
-            g_domain.push(BigIntElement::from_u32(i));
+            g_domain.push(CryptoBigIntElement::from_u32(i));
         }
 
         let actual = poly.eval_batch(&g_domain);
@@ -1034,8 +1040,8 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial_with_fft() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly = Polynomial::new(&f);
@@ -1044,10 +1050,10 @@ mod tests {
         }
 
         let size = 2_u32.pow(8);
-        let sub_g = f.generator(BigIntElement::from_u32(size));
+        let sub_g = f.generator(CryptoBigIntElement::from_u32(size));
         let mut g_domain = Vec::new();
         for i in 0..size {
-            g_domain.push(f.exp(&sub_g, &BigIntElement::from_u32(i)));
+            g_domain.push(f.exp(&sub_g, &&CryptoBigIntElement::from_u32(i)));
         }
 
         let actual = poly.eval_batch(&g_domain);
@@ -1059,8 +1065,8 @@ mod tests {
 
     #[test]
     fn should_check_polynomial_equality() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(101)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(0)));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly1 = Polynomial::new(&f);
@@ -1075,8 +1081,8 @@ mod tests {
 
     #[test]
     fn should_add_polynomials() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         // 2x^2 - 20
@@ -1106,8 +1112,8 @@ mod tests {
 
     #[test]
     fn should_subtract_polynomials() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         // 2x^2 - 20
@@ -1141,8 +1147,8 @@ mod tests {
 
     #[test]
     fn should_multiply_polynomials() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         // 2x^2 - 20
@@ -1170,8 +1176,8 @@ mod tests {
 
     #[test]
     fn should_multiply_polynomials_fft() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let mut poly1 = Polynomial::new(&f);
@@ -1190,26 +1196,26 @@ mod tests {
 
     #[test]
     fn should_build_zeroifier_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let s = 128;
-        let size = BigIntElement(BigInt::from(s));
+        let size = CryptoBigIntElement::from_u32(s);
         let domain_g = f.generator(size);
         let mut domain = Vec::new();
         for i in 0..s {
-            domain.push(f.exp(&domain_g, &BigIntElement(BigInt::from(i))));
+            domain.push(f.exp(&domain_g, &CryptoBigIntElement::from_u32(i)));
         }
 
         let poly = Polynomial::zeroifier(&domain, &f);
         for i in 0..s {
-            assert_eq!(poly.eval(&domain[i]), BigIntElement::zero());
+            assert_eq!(poly.eval(&domain[i as usize]), CryptoBigIntElement::zero());
         }
 
         let mut is_zero = true;
         for i in poly.coefs() {
-            if i != &BigIntElement::zero() {
+            if i != &CryptoBigIntElement::zero() {
                 is_zero = false;
             }
         }
@@ -1218,20 +1224,20 @@ mod tests {
 
     #[test]
     fn should_build_zeroifier_polynomial_domain() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
+        let p = CryptoBigIntElement(to_u256(BigInt::from(3221225473_u32)));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(5)));
         let f = Rc::new(Field::new(p, g));
 
         let size = 128_u32;
-        let generator = f.generator(BigIntElement::from_u32(size));
+        let generator = f.generator(CryptoBigIntElement::from_u32(size));
         let domain = f.domain(&generator, size);
         let zeroifier = Polynomial::zeroifier(&domain, &f);
         let mut zeroifier_fft = Polynomial::zeroifier_fft(&domain, &f);
         zeroifier_fft.trim();
 
         for v in domain {
-            assert_eq!(BigIntElement::zero(), zeroifier_fft.eval(&v));
-            assert_eq!(BigIntElement::zero(), zeroifier.eval(&v));
+            assert_eq!(CryptoBigIntElement::zero(), zeroifier_fft.eval(&v));
+            assert_eq!(CryptoBigIntElement::zero(), zeroifier.eval(&v));
         }
 
         assert!(zeroifier.is_equal(&zeroifier_fft));

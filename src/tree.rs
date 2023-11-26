@@ -107,9 +107,10 @@ pub fn u128_to_bytes(v: &u128) -> [u8; 32] {
     bytes_vec.resize(32, 0);
     bytes_vec[0..32].try_into().unwrap()
 }
+
 #[cfg(test)]
 mod tests {
-    use crate::BigIntElement;
+    use crate::CryptoBigIntElement;
 
     use super::*;
 
@@ -119,7 +120,7 @@ mod tests {
         for i in 0..100 {
             leaves.push(u128_to_bytes(&(i as u128)));
         }
-        let tree = Tree::<BigIntElement>::build(&leaves);
+        let tree = Tree::<CryptoBigIntElement>::build(&leaves);
         // expected levels.len() = log2(leaves.len()) + 1
         let expected_len = 7 + 1;
         assert_eq!(tree.levels.len(), expected_len);
@@ -138,10 +139,10 @@ mod tests {
         for i in 0..100 {
             leaves.push(u128_to_bytes(&(i as u128)));
         }
-        let root = Tree::<BigIntElement>::commit(&leaves);
+        let root = Tree::<CryptoBigIntElement>::commit(&leaves);
         // choose a random value to change root
         leaves[0] = u128_to_bytes(&124812491);
-        let root_changed = Tree::<BigIntElement>::commit(&leaves);
+        let root_changed = Tree::<CryptoBigIntElement>::commit(&leaves);
 
         assert_ne!(root, root_changed);
     }
@@ -153,9 +154,9 @@ mod tests {
             leaves.push(u128_to_bytes(&(i as u128)));
         }
         let index = 5;
-        let tree = Tree::<BigIntElement>::build(&leaves);
+        let tree = Tree::<CryptoBigIntElement>::build(&leaves);
         let (path, root) = tree.open(index);
-        Tree::<BigIntElement>::verify(&root, index, &path, &leaves[index as usize]);
+        Tree::<CryptoBigIntElement>::verify(&root, index, &path, &leaves[index as usize]);
     }
 
     #[test]
@@ -166,11 +167,11 @@ mod tests {
             leaves.push(u128_to_bytes(&(i as u128)));
         }
         let index = 5;
-        let tree = Tree::<BigIntElement>::build(&leaves);
+        let tree = Tree::<CryptoBigIntElement>::build(&leaves);
         let (mut path, root) = tree.open(index);
         // change some path element
         path[4] = u128_to_bytes(&124812491);
-        Tree::<BigIntElement>::verify(&root, index, &path, &leaves[index as usize]);
+        Tree::<CryptoBigIntElement>::verify(&root, index, &path, &leaves[index as usize]);
     }
 
     #[test]
@@ -180,10 +181,10 @@ mod tests {
         for i in 0..100 {
             leaves.push(u128_to_bytes(&(i as u128)));
         }
-        let tree = Tree::<BigIntElement>::build(&leaves);
+        let tree = Tree::<CryptoBigIntElement>::build(&leaves);
         let index = 5;
         let (path, _) = tree.open(index);
         let root = u128_to_bytes(&1921);
-        Tree::<BigIntElement>::verify(&root, index, &path, &leaves[index as usize]);
+        Tree::<CryptoBigIntElement>::verify(&root, index, &path, &leaves[index as usize]);
     }
 }

@@ -1,4 +1,6 @@
 use crate::FieldElement;
+// use crypto_bigint::{U128, Encoding};
+// use num_bigint::BigUint;
 use rand::Rng;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -48,7 +50,7 @@ impl<T: FieldElement> Field<T> {
     }
 
     pub fn bigint(&self, val: i32) -> T {
-        T::from_i32(val).modd(self.p())
+        T::from_i32(val, self.p())
     }
 
     pub fn biguint(&self, val: u32) -> T {
@@ -122,8 +124,7 @@ impl<T: FieldElement> Field<T> {
     }
 
     pub fn inv(&self, v: &T) -> T {
-        let e_gcd = v.clone().extended_gcd(&self.p);
-        self.add(&e_gcd, &self.p)
+        v.inv(self.p())
     }
 
     pub fn inv_batch(&self, values: &Vec<T>) -> Vec<T> {
@@ -217,36 +218,22 @@ impl<T: FieldElement> Field<T> {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::{BigInt, Sign};
+    use crypto_bigint::U256;
+    use num_bigint::BigInt;
 
-    use crate::BigIntElement;
+    use crate::{to_u256, BigIntElement, CryptoBigIntElement};
 
     use super::*;
 
     #[test]
     fn should_make_bigint() {
-        let p = BigIntElement(BigInt::from(101));
-        let f = Field::new(p, BigIntElement(BigInt::from(0)));
-        assert_eq!(
-            f.bigint(0),
-            BigIntElement(BigInt::new(Sign::Minus, vec!(0)))
-        );
-        assert_eq!(
-            f.bigint(-29),
-            BigIntElement(BigInt::new(Sign::Plus, vec!(72)))
-        );
-        assert_eq!(
-            f.bigint(32),
-            BigIntElement(BigInt::new(Sign::Plus, vec!(32)))
-        );
-        assert_eq!(
-            f.biguint(0),
-            BigIntElement(BigInt::new(Sign::Minus, vec!(0)))
-        );
-        assert_eq!(
-            f.biguint(32),
-            BigIntElement(BigInt::new(Sign::Plus, vec!(32)))
-        );
+        let p = CryptoBigIntElement(to_u256(BigInt::from(101)));
+        let f = Field::new(p, CryptoBigIntElement(to_u256(BigInt::from(0))));
+        assert_eq!(f.bigint(0), CryptoBigIntElement(U256::from_u32(0)));
+        assert_eq!(f.bigint(-29), CryptoBigIntElement(U256::from_u32(72)));
+        assert_eq!(f.bigint(32), CryptoBigIntElement(U256::from_u32(32)));
+        assert_eq!(f.biguint(0), CryptoBigIntElement(U256::from_u32(0)));
+        assert_eq!(f.biguint(32), CryptoBigIntElement(U256::from_u32(32)));
     }
 
     #[test]
@@ -259,12 +246,9 @@ mod tests {
         let y = f.bigint(90);
 
         assert_eq!(f.add(&x, &y), f.bigint(29));
-    }
 
-    #[test]
-    fn should_add_neg_elements() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
+        let p = CryptoBigIntElement(U256::from_u32(101));
+        let g = CryptoBigIntElement(U256::from_u32(0));
         let f = Field::new(p, g);
 
         let x = f.bigint(40);
@@ -272,6 +256,7 @@ mod tests {
 
         assert_eq!(f.add(&x, &y), f.bigint(29));
     }
+
     #[test]
     fn should_mul_two_elements() {
         let p = BigIntElement(BigInt::from(101));
@@ -282,12 +267,29 @@ mod tests {
         let y = f.bigint(90);
 
         assert_eq!(f.mul(&x, &y), f.bigint(65));
-    }
 
+        let p = CryptoBigIntElement(U256::from_u32(101));
+        let g = CryptoBigIntElement(U256::from_u32(0));
+        let f = Field::new(p, g);
+
+        let x = f.bigint(40);
+        let y = f.bigint(90);
+
+        assert_eq!(f.mul(&x, &y), f.bigint(65));
+    }
     #[test]
     fn should_sub_two_elements() {
         let p = BigIntElement(BigInt::from(101));
         let g = BigIntElement(BigInt::from(0));
+        let f = Field::new(p, g);
+
+        let x = f.bigint(2);
+        let y = f.bigint(20);
+
+        assert_eq!(f.sub(&x, &y), f.biguint(83));
+
+        let p = CryptoBigIntElement(U256::from_u32(101));
+        let g = CryptoBigIntElement(U256::from_u32(0));
         let f = Field::new(p, g);
 
         let x = f.bigint(2);
@@ -306,12 +308,31 @@ mod tests {
             let g = f.generator(f.biguint(u32::pow(2, i)));
             assert_eq!(f.exp(&g, &f.biguint(u32::pow(2, i))), f.bigint(1));
         }
+
+        let p = CryptoBigIntElement(U256::from_u32(3221225473_u32));
+        let f_g = CryptoBigIntElement(U256::from_u32(5));
+        let f = Field::new(p, f_g);
+
+        for i in 1..10 {
+            let g = f.generator(f.biguint(u32::pow(2, i)));
+            assert_eq!(f.exp(&g, &f.biguint(u32::pow(2, i))), f.bigint(1));
+        }
     }
 
     #[test]
     fn should_get_inverse() {
         let p = BigIntElement(BigInt::from(3221225473_u32));
         let f_g = BigIntElement(BigInt::from(5));
+        let f = Field::new(p, f_g);
+
+        for i in 1..99 {
+            let v = f.biguint(i);
+            let inv = f.inv(&v);
+            assert_eq!(f.mul(&inv, &v), Field::one());
+        }
+
+        let p = CryptoBigIntElement(U256::from_u32(3221225473_u32));
+        let f_g = CryptoBigIntElement(U256::from_u32(5));
         let f = Field::new(p, f_g);
 
         for i in 1..99 {

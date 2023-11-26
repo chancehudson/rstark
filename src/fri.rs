@@ -372,18 +372,27 @@ impl<T: FieldElement> Fri<T> {
 mod tests {
     use num_bigint::BigInt;
 
-    use crate::BigIntElement;
+    use crate::{to_u256, BigIntElement, CryptoBigIntElement};
 
     use super::*;
 
     #[test]
     fn should_make_verify_fri_proof() {
         let mut channel = Channel::new();
-        let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
-        let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
+        // let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
+        // let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
+
+        let p = CryptoBigIntElement(to_u256(
+            BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119),
+        ));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(
+            85408008396924667383611388730472331217_u128,
+        )));
+
         let f = Rc::new(Field::new(p, g.clone()));
         let domain_size: u32 = 8192;
-        let domain_g = f.generator(BigIntElement::from_u32(domain_size));
+        // let domain_g = f.generator(BigIntElement::from_u32(domain_size));
+        let domain_g = f.generator(CryptoBigIntElement::from_u32(domain_size));
 
         let fri = Fri::new(
             &FriOptions {
@@ -397,7 +406,9 @@ mod tests {
         );
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigIntElement(BigInt::from(3)), 2);
+        // poly.term(&BigIntElement(BigInt::from(3)), 2);
+        poly.term(&CryptoBigIntElement(to_u256(BigInt::from(3))), 2);
+
         let mut points = Vec::new();
         for i in fri.domain() {
             points.push(poly.eval(i));

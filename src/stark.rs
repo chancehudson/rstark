@@ -577,14 +577,18 @@ impl<T: FieldElement> Stark<T> {
 mod tests {
     use num_bigint::BigInt;
 
-    use crate::BigIntElement;
+    use crate::{to_u256, BigIntElement, CryptoBigIntElement};
 
     use super::*;
 
     #[test]
     fn should_make_verify_stark_proof() {
-        let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
-        let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
+        let p = CryptoBigIntElement(to_u256(
+            BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119),
+        ));
+        let g = CryptoBigIntElement(to_u256(BigInt::from(
+            85408008396924667383611388730472331217_u128,
+        )));
         let f = Rc::new(Field::new(p, g.clone()));
 
         let sequence_len = 40;
@@ -592,12 +596,12 @@ mod tests {
 
         let mut trace = Vec::new();
         trace.push(vec![
-            BigIntElement(BigInt::from(2)),
-            BigIntElement(BigInt::from(3)),
+            CryptoBigIntElement::from_u32(2),
+            CryptoBigIntElement::from_u32(3),
         ]);
         trace.push(vec![
-            BigIntElement(BigInt::from(4)),
-            BigIntElement(BigInt::from(9)),
+            CryptoBigIntElement::from_u32(4),
+            CryptoBigIntElement::from_u32(9),
         ]);
         while trace.len() < sequence_len.try_into().unwrap() {
             let e1 = &trace[trace.len() - 1][0];
@@ -606,8 +610,8 @@ mod tests {
         }
 
         let boundary_constraints = vec![
-            (0, 0, BigIntElement(BigInt::from(2))),
-            (0, 1, BigIntElement(BigInt::from(3))),
+            (0, 0, CryptoBigIntElement::from_u32(2)),
+            (0, 1, CryptoBigIntElement::from_u32(3)),
             (sequence_len - 1, 0, trace[trace.len() - 1][0].clone()),
             (sequence_len - 1, 1, trace[trace.len() - 1][1].clone()),
         ];
