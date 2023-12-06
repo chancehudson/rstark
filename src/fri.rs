@@ -208,8 +208,9 @@ impl<T: FieldElement> Fri<T> {
             let mut hasher = blake3::Hasher::new();
             hasher.update(seed);
             hasher.update(&T::from_u32(counter).to_bytes_le());
-            let v = T::from_bytes_le(hasher.finalize().as_bytes());
-            let index = v.modd(&T::from_u32(size)).to_u32();
+
+            let v = T::from_bytes_le(hasher.finalize().as_bytes()).to_u32();
+            let index = v % size;
             let reduced_index = index % reduced_size;
             counter += 1;
             reduced_indices.entry(reduced_index).or_insert_with(|| {

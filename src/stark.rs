@@ -575,6 +575,8 @@ impl<T: FieldElement> Stark<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use num_bigint::BigInt;
 
     use crate::{to_u256, BigIntElement, CryptoBigIntElement};
@@ -634,8 +636,12 @@ mod tests {
             c.sub(&next_state[1]);
             transition_constraints.push(c);
         }
-
+        let start_time = Instant::now();
         let proof = stark.prove(&trace, &transition_constraints, &boundary_constraints);
+        let p = start_time.elapsed().as_secs();
+        println!("proof time: {}s", p);
         stark.verify(&proof, &transition_constraints, &boundary_constraints);
+        let v = start_time.elapsed().as_secs();
+        println!("verify time: {}s", v);
     }
 }

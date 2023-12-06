@@ -10,7 +10,7 @@ use crate::field::Field;
 use crate::mpolynomial::MPolynomial;
 use crate::stark::Stark;
 use crypto_bigint::modular::runtime_mod::{DynResidue, DynResidueParams};
-use crypto_bigint::{Encoding, NonZero, U256};
+use crypto_bigint::{Encoding, U256};
 use num_bigint::{BigInt, Sign};
 use num_integer::Integer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -123,30 +123,43 @@ extern "C" {
 }
 
 pub trait FieldElement: Eq + PartialEq + Clone + PartialOrd + Hash + Debug {
-    fn add(&self, v: &Self, p: &Self) -> Self;
-    fn mul(&self, v: &Self, p: &Self) -> Self;
-    fn sub(&self, v: &Self, p: &Self) -> Self;
-    fn div(&self, v: &Self, p: &Self) -> Self;
-    fn modpow(&self, e: &Self, p: &Self) -> Self;
-    fn modd(&self, p: &Self) -> Self;
+    type ModulusType: Serialize + Debug;
+
+    fn add(&self, v: &Self, p: &Self::ModulusType) -> Self;
+    fn mul(&self, v: &Self, p: &Self::ModulusType) -> Self;
+    fn sub(&self, v: &Self, p: &Self::ModulusType) -> Self;
+    fn div(&self, v: &Self, p: &Self::ModulusType) -> Self;
+    fn modpow(&self, e: &Self, p: &Self::ModulusType) -> Self;
+    fn modd(&self, p: &Self::ModulusType) -> Self;
+    fn inv(&self, p: &Self::ModulusType) -> Self;
+    fn from_i32(v: i32, p: &Self::ModulusType) -> Self;
 
     fn two() -> Self;
     fn one() -> Self;
     fn zero() -> Self;
-    fn inv(&self, p: &Self) -> Self;
+
     fn bits(&self) -> u64;
     fn from_u32(v: u32) -> Self;
-    fn from_i32(v: i32, p: &Self) -> Self;
     fn to_u32(&self) -> u32;
     fn from_bytes_le(v: &[u8]) -> Self;
     fn to_bytes_le(&self) -> Vec<u8>;
     fn to_bytes_le_sized(&self) -> [u8; 32];
+
+    fn from_modulus(v: &Self::ModulusType) -> Self;
+    fn to_modulus(v: Self) -> Self::ModulusType;
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, PartialOrd, Hash, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct BigIntElement(pub BigInt);
 
 impl FieldElement for BigIntElement {
+    type ModulusType = BigIntElement;
+    fn to_modulus(v: Self) -> Self::ModulusType {
+        v
+    }
+    fn from_modulus(v: &Self::ModulusType) -> Self {
+        v.clone()
+    }
     fn to_u32(&self) -> u32 {
         let (_, digits) = self.0.to_u32_digits();
         if digits.is_empty() {
@@ -226,7 +239,7 @@ pub struct CryptoBigIntElement(pub U256);
 
 impl Debug for CryptoBigIntElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("check")
+        f.debug_struct("value")
             .field("x", &to_biguint(&self.0).to_string())
             .finish()
     }
@@ -241,40 +254,53 @@ impl<'de> Deserialize<'de> for CryptoBigIntElement {
     }
 }
 
+#[derive(Debug)]
+pub struct ParamWrapper(pub DynResidueParams<4>);
+
+impl Serialize for ParamWrapper {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(std::str::from_utf8(&self.0.modulus().to_le_bytes()).unwrap())
+    }
+}
+
 impl FieldElement for CryptoBigIntElement {
-    fn add(&self, v: &Self, p: &Self) -> Self {
-        CryptoBigIntElement(self.0.wrapping_add(&v.0).rem(&NonZero::new(p.0).unwrap()))
+    type ModulusType = ParamWrapper;
+    fn add(&self, v: &Self, p: &Self::ModulusType) -> Self {
+        let x_mod = DynResidue::new(&self.0, p.0);
+        let y_mod = DynResidue::new(&v.0, p.0);
+        CryptoBigIntElement((x_mod + y_mod).retrieve())
     }
 
-    fn mul(&self, v: &Self, p: &Self) -> Self {
-        CryptoBigIntElement(self.0.wrapping_mul(&v.0).rem(&NonZero::new(p.0).unwrap()))
+    fn mul(&self, v: &Self, p: &Self::ModulusType) -> Self {
+        let x_mod = DynResidue::new(&self.0, p.0);
+        let y_mod = DynResidue::new(&v.0, p.0);
+        CryptoBigIntElement((x_mod * y_mod).retrieve())
     }
 
-    fn sub(&self, v: &Self, p: &Self) -> Self {
-        CryptoBigIntElement(self.0.sub_mod(&v.0, &p.0))
+    fn sub(&self, v: &Self, p: &Self::ModulusType) -> Self {
+        let x_mod = DynResidue::new(&self.0, p.0);
+        let y_mod = DynResidue::new(&v.0, p.0);
+        CryptoBigIntElement((x_mod - y_mod).retrieve())
     }
 
-    fn div(&self, v: &Self, p: &Self) -> Self {
-        let s = self.0.checked_div(&v.0).unwrap();
-        CryptoBigIntElement(s.rem(&NonZero::new(p.0).unwrap()))
+    fn div(&self, v: &Self, p: &Self::ModulusType) -> Self {
+        let x_mod = DynResidue::new(&self.0, p.0);
+        let y_modinv = DynResidue::new(&v.0, p.0).invert().0;
+        CryptoBigIntElement((x_mod * y_modinv).retrieve())
     }
 
-    fn modpow(&self, e: &Self, p: &Self) -> Self {
+    fn modpow(&self, e: &Self, p: &Self::ModulusType) -> Self {
         // (self ^ exponent) mod modulus
-        let params = DynResidueParams::new(&p.0);
-        let a_m = DynResidue::new(&self.0, params);
+        let a_m = DynResidue::new(&self.0, p.0);
         CryptoBigIntElement(a_m.pow(&e.0).retrieve())
     }
 
-    fn modd(&self, p: &Self) -> Self {
-        // assert!(p.0.sign() == Sign::Plus);
-        // if self.0.sign() == Sign::Minus {
-        //     BigIntElement(((-&self.0) / &p.0 + 1) * &p.0 + &self.0)
-        // } else {
-        //     BigIntElement(&self.0 % &p.0)
-        // }
-
-        CryptoBigIntElement(self.0.rem(&NonZero::new(p.0).unwrap()))
+    fn modd(&self, p: &Self::ModulusType) -> Self {
+        let x_mod = DynResidue::new(&self.0, p.0);
+        CryptoBigIntElement(x_mod.retrieve())
     }
 
     fn two() -> Self {
@@ -289,8 +315,8 @@ impl FieldElement for CryptoBigIntElement {
         CryptoBigIntElement(U256::ZERO)
     }
 
-    fn inv(&self, p: &Self) -> Self {
-        CryptoBigIntElement(self.0.inv_mod(&p.0).0)
+    fn inv(&self, p: &Self::ModulusType) -> Self {
+        CryptoBigIntElement(self.0.inv_mod(&p.0.modulus()).0)
     }
     fn bits(&self) -> u64 {
         self.0.bits().try_into().unwrap()
@@ -300,16 +326,20 @@ impl FieldElement for CryptoBigIntElement {
         CryptoBigIntElement(U256::from_u32(v))
     }
 
-    fn from_i32(v: i32, p: &Self) -> Self {
+    fn from_i32(v: i32, p: &Self::ModulusType) -> Self {
+        let m = p.0.modulus();
+
         if v.is_negative() {
             let s = U256::from_u32(-v as u32);
             CryptoBigIntElement(
-                s.wrapping_div(&p.0)
+                s.wrapping_div(&m)
                     .wrapping_add(&U256::ONE)
-                    .wrapping_mul(&p.0.wrapping_sub(&s)),
+                    .wrapping_mul(&m.wrapping_sub(&s)),
             )
         } else {
-            CryptoBigIntElement(U256::from_u32(v as u32).rem(&NonZero::new(p.0).unwrap()))
+            let params = DynResidueParams::new(&m);
+            let val = DynResidue::new(&U256::from_u32(v as u32), params);
+            CryptoBigIntElement(val.retrieve())
         }
     }
 
@@ -329,6 +359,14 @@ impl FieldElement for CryptoBigIntElement {
         let mut extended = self.to_bytes_le();
         extended.resize(32, 0);
         extended.try_into().unwrap()
+    }
+
+    fn from_modulus(v: &Self::ModulusType) -> Self {
+        CryptoBigIntElement(*v.0.modulus())
+    }
+
+    fn to_modulus(v: Self) -> Self::ModulusType {
+        ParamWrapper(DynResidueParams::new(&v.0))
     }
 }
 

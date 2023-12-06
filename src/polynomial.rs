@@ -840,7 +840,10 @@ mod tests {
         let f = Rc::new(Field::new(p.clone(), g));
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&CryptoBigIntElement::from_i32(-9, &p), 0);
+        poly.term(
+            &CryptoBigIntElement::from_i32(-9, &CryptoBigIntElement::to_modulus(p)),
+            0,
+        );
         poly.term(&CryptoBigIntElement::from_u32(2), 1);
         let mut x_vals = Vec::new();
         let mut y_vals = Vec::new();
@@ -1135,8 +1138,6 @@ mod tests {
         let mut expected1 = Polynomial::new(&f);
         expected1.term(&f.bigint(-9), 3);
         expected1.term(&f.bigint(6), 2);
-        println!("expected1=={:?}", expected1.coefs());
-        println!("out1=={:?}", out1.coefs());
         assert!(expected1.is_equal(&out1));
 
         let mut expected2 = Polynomial::new(&f);

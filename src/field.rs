@@ -1,6 +1,4 @@
 use crate::FieldElement;
-// use crypto_bigint::{U128, Encoding};
-// use num_bigint::BigUint;
 use rand::Rng;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -8,7 +6,7 @@ use std::sync::RwLock;
 
 #[derive(Serialize, Debug)]
 pub struct Field<T: FieldElement> {
-    p: T,
+    p: T::ModulusType,
     g: T,
     // generator, size size keyed to contents
     group_cache: RwLock<HashMap<(T, u32), Vec<T>>>,
@@ -20,13 +18,13 @@ pub struct Field<T: FieldElement> {
 impl<T: FieldElement> Field<T> {
     pub fn new(p: T, g: T) -> Field<T> {
         let mut f = Field {
-            p,
+            p: T::to_modulus(p),
             g,
             group_cache: RwLock::new(HashMap::new()),
             coset_cache: RwLock::new(HashMap::new()),
             generator_cache: HashMap::new(),
         };
-        if f.p.bits() <= 32 {
+        if T::from_modulus(&f.p).bits() <= 32 {
             // we're likely in the 101 field in tests
             // don't build the domain cache
             return f;
@@ -57,7 +55,7 @@ impl<T: FieldElement> Field<T> {
         T::from_u32(val).modd(self.p())
     }
 
-    pub fn p(&self) -> &T {
+    pub fn p(&self) -> &T::ModulusType {
         &self.p
     }
 
@@ -86,7 +84,7 @@ impl<T: FieldElement> Field<T> {
     }
 
     pub fn neg(&self, v: &T) -> T {
-        self.p.sub(v, self.p())
+        T::from_modulus(&self.p).sub(v, self.p())
     }
 
     pub fn div(&self, v1: &T, v2: &T) -> T {
@@ -112,10 +110,11 @@ impl<T: FieldElement> Field<T> {
     }
 
     pub fn generator(&self, size: T) -> T {
-        if size >= self.p {
+        let p = T::from_modulus(&self.p);
+        if size >= p {
             panic!("requested subgroup is larger than field");
         }
-        let numer = &self.p.sub(&T::one(), self.p());
+        let numer = &p.sub(&T::one(), self.p());
         let exp = numer.div(&size, self.p());
         if exp.mul(&size, self.p()) != *numer {
             panic!("subgroup is not a divisor of field");
