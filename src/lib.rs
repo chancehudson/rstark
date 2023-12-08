@@ -254,13 +254,19 @@ impl<'de> Deserialize<'de> for CryptoBigIntElement {
     }
 }
 
+#[cfg(target_pointer_width = "16")]
+const POINTER_WIDTH: usize = 16;
+
 #[cfg(target_pointer_width = "32")]
-#[derive(Debug)]
-pub struct ParamWrapper(pub DynResidueParams<8>);
+const POINTER_WIDTH: usize = 32;
 
 #[cfg(target_pointer_width = "64")]
+const POINTER_WIDTH: usize = 64;
+
+const LIMBS: usize = 256/POINTER_WIDTH;
+
 #[derive(Debug)]
-pub struct ParamWrapper(pub DynResidueParams<4>);
+pub struct ParamWrapper(pub DynResidueParams<LIMBS>);
 
 impl Serialize for ParamWrapper {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -349,7 +355,7 @@ impl FieldElement for CryptoBigIntElement {
     }
 
     fn to_u32(&self) -> u32 {
-        u32::from_le_bytes(self.to_bytes_le_sized()[..4].try_into().unwrap())
+        u32::from_le_bytes(self.to_bytes_le_sized()[..LIMBS].try_into().unwrap())
     }
 
     fn from_bytes_le(v: &[u8]) -> Self {
