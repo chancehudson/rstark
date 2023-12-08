@@ -254,6 +254,11 @@ impl<'de> Deserialize<'de> for CryptoBigIntElement {
     }
 }
 
+#[cfg(target_pointer_width = "32")]
+#[derive(Debug)]
+pub struct ParamWrapper(pub DynResidueParams<8>);
+
+#[cfg(target_pointer_width = "64")]
 #[derive(Debug)]
 pub struct ParamWrapper(pub DynResidueParams<4>);
 
