@@ -35,9 +35,11 @@ impl<T: FieldElement> Stark<T> {
         transition_constraints_degree: u32,
     ) -> Stark<T> {
         let randomizer_count = 4 * colinearity_test_count;
-        let trace_bits =
-            T::from_u32((original_trace_len + randomizer_count) * transition_constraints_degree)
-                .bits();
+        let trace_bits = T::from_u32(
+            (original_trace_len + randomizer_count) * transition_constraints_degree,
+            field.p(),
+        )
+        .bits();
         let omicron_domain_len = 2_u32.pow(u32::try_from(trace_bits).unwrap());
         let fri_domain_len = omicron_domain_len * expansion_factor;
         let (omega, _) = field.generator_cache(&fri_domain_len);
@@ -165,9 +167,9 @@ impl<T: FieldElement> Stark<T> {
         for i in 0..count {
             let mut hasher = blake3::Hasher::new();
             hasher.update(&randomness.to_bytes_le());
-            hasher.update(&T::from_u32(i).to_bytes_le());
-            let v = T::from_bytes_le(hasher.finalize().as_bytes());
-            out.push(v.modd(&self.field.p()));
+            hasher.update(&T::from_u32(i, self.field().p()).to_bytes_le());
+            let v = T::from_bytes_le(hasher.finalize().as_bytes(), self.field().p());
+            out.push(v);
         }
         out
     }
@@ -189,7 +191,7 @@ impl<T: FieldElement> Stark<T> {
             trace.push(r);
         }
 
-        let mut trace_domain = vec![T::zero(); trace.len()];
+        let mut trace_domain = vec![self.field.zero(); trace.len()];
         trace_domain.clone_from_slice(&self.omicron_domain[0..trace.len()]);
 
         let mut y_vals = Vec::new();
@@ -239,7 +241,7 @@ impl<T: FieldElement> Stark<T> {
         }
 
         let mut p_x = Polynomial::new(&self.field);
-        p_x.term(&T::one(), 1);
+        p_x.term(&self.field.one(), 1);
         let p_x = p_x;
 
         let mut point = Vec::new();
@@ -253,7 +255,9 @@ impl<T: FieldElement> Stark<T> {
 
         let mut transition_weights = Vec::new();
         {
-            let coef = self.field.sample(T::from_bytes_le(&channel.prover_hash()));
+            let coef = self
+                .field
+                .sample(T::from_bytes_le(&channel.prover_hash(), self.field().p()));
             transition_weights.push(coef.clone());
             for i in 1..transition_constraints.len() {
                 transition_weights.push(self.field.mul(&transition_weights[i - 1], &coef));
@@ -295,7 +299,10 @@ impl<T: FieldElement> Stark<T> {
         let count =
             u32::try_from(1 + 2/*transition_quotients.len()*/ + 2 * boundary_quotients.len())
                 .unwrap();
-        let weights = self.sample_weights(count, &T::from_bytes_le(&channel.prover_hash()));
+        let weights = self.sample_weights(
+            count,
+            &T::from_bytes_le(&channel.prover_hash(), self.field().p()),
+        );
 
         let bounds = self.transition_quotient_degree_bound(&single_transition_constraint);
         if transition_quotient.degree() != usize::try_from(bounds).unwrap() {
@@ -402,7 +409,7 @@ impl<T: FieldElement> Stark<T> {
         {
             let coef = self
                 .field
-                .sample(T::from_bytes_le(&channel.verifier_hash()));
+                .sample(T::from_bytes_le(&channel.verifier_hash(), self.field().p()));
             transition_weights.push(coef.clone());
             for i in 1..transition_constraints.len() {
                 transition_weights.push(self.field.mul(&transition_weights[i - 1], &coef));
@@ -422,7 +429,10 @@ impl<T: FieldElement> Stark<T> {
                 + 2 * usize::try_from(self.register_count).unwrap(),
         )
         .unwrap();
-        let weights = self.sample_weights(count, &T::from_bytes_le(&channel.verifier_hash()));
+        let weights = self.sample_weights(
+            count,
+            &T::from_bytes_le(&channel.verifier_hash(), self.field().p()),
+        );
 
         let mut polynomial_vals = self.fri.verify(&mut channel);
         polynomial_vals.sort_by(|(ax, _ay), (bx, _by)| {
@@ -493,8 +503,10 @@ impl<T: FieldElement> Stark<T> {
                 self.field.g(),
                 &self.omega_domain[usize::try_from(next_index).unwrap()],
             );
-            let mut current_trace = vec![T::zero(); usize::try_from(self.register_count).unwrap()];
-            let mut next_trace = vec![T::zero(); usize::try_from(self.register_count).unwrap()];
+            let mut current_trace =
+                vec![self.field.zero(); usize::try_from(self.register_count).unwrap()];
+            let mut next_trace =
+                vec![self.field.zero(); usize::try_from(self.register_count).unwrap()];
 
             for j in 0..usize::try_from(self.register_count).unwrap() {
                 let zeroifier = &boundary_zeroifiers[j];
@@ -502,14 +514,14 @@ impl<T: FieldElement> Stark<T> {
 
                 current_trace[j] = self.field.add(
                     &self.field.mul(
-                        &T::from_bytes_le(leaves[j].get(&current_index).unwrap()),
+                        &T::from_bytes_le(leaves[j].get(&current_index).unwrap(), self.field().p()),
                         &zeroifier.eval(&domain_current_index),
                     ),
                     &interpolant.eval(&domain_current_index),
                 );
                 next_trace[j] = self.field.add(
                     &self.field.mul(
-                        &T::from_bytes_le(leaves[j].get(&next_index).unwrap()),
+                        &T::from_bytes_le(leaves[j].get(&next_index).unwrap(), self.field().p()),
                         &zeroifier.eval(&domain_next_index),
                     ),
                     &interpolant.eval(&domain_next_index),
@@ -529,6 +541,7 @@ impl<T: FieldElement> Stark<T> {
             let mut terms = Vec::new();
             terms.push(T::from_bytes_le(
                 randomizer_map.get(&current_index).unwrap(),
+                self.field().p(),
             ));
 
             // power map for domain_current_index
@@ -540,25 +553,30 @@ impl<T: FieldElement> Stark<T> {
             terms.push(q.clone());
             let shift = transition_constraints_max_degree - transition_quotient_degree_bound;
             {
-                let exp = self.field.exp(&domain_current_index, &T::from_u32(shift));
+                let exp = self
+                    .field
+                    .exp(&domain_current_index, &T::from_u32(shift, self.field().p()));
                 terms.push(self.field.mul(&q, &exp));
                 power_map.insert(shift, exp);
             }
 
             for j in 0..usize::try_from(self.register_count).unwrap() {
-                let bqv = T::from_bytes_le(leaves[j].get(&current_index).unwrap());
+                let bqv =
+                    T::from_bytes_le(leaves[j].get(&current_index).unwrap(), self.field().p());
                 terms.push(bqv.clone());
                 let shift = transition_constraints_max_degree - boundary_quotient_degree_bounds[j];
                 if let Some(exp) = power_map.get(&shift) {
                     terms.push(self.field.mul(&bqv, exp));
                 } else {
-                    let exp = self.field.exp(&domain_current_index, &T::from_u32(shift));
+                    let exp = self
+                        .field
+                        .exp(&domain_current_index, &T::from_u32(shift, self.field().p()));
                     terms.push(self.field.mul(&bqv, &exp));
                     power_map.insert(shift, exp);
                 }
             }
 
-            let mut combination = T::zero();
+            let mut combination = self.field.zero();
             for j in 0..terms.len() {
                 combination = self
                     .field
@@ -575,30 +593,31 @@ impl<T: FieldElement> Stark<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use num_bigint::BigInt;
 
-    use crate::BigIntElement;
+    use crate::{to_crypto_element, to_crypto_params, BigIntElement};
 
     use super::*;
 
     #[test]
     fn should_make_verify_stark_proof() {
-        let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
-        let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
-        let f = Rc::new(Field::new(p, g.clone()));
+        let p = to_crypto_params(BigIntElement(
+            BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119),
+        ));
+        let g = to_crypto_element(
+            BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128)),
+            &p,
+        );
+        let f = Rc::new(Field::new(g.clone()));
 
         let sequence_len = 40;
         let stark = Stark::new(&g.clone(), &f, 2, sequence_len, 32, 26, 2);
 
         let mut trace = Vec::new();
-        trace.push(vec![
-            BigIntElement(BigInt::from(2)),
-            BigIntElement(BigInt::from(3)),
-        ]);
-        trace.push(vec![
-            BigIntElement(BigInt::from(4)),
-            BigIntElement(BigInt::from(9)),
-        ]);
+        trace.push(vec![f.bigint(2), f.bigint(3)]);
+        trace.push(vec![f.bigint(4), f.bigint(9)]);
         while trace.len() < sequence_len.try_into().unwrap() {
             let e1 = &trace[trace.len() - 1][0];
             let e2 = &trace[trace.len() - 1][1];
@@ -606,8 +625,8 @@ mod tests {
         }
 
         let boundary_constraints = vec![
-            (0, 0, BigIntElement(BigInt::from(2))),
-            (0, 1, BigIntElement(BigInt::from(3))),
+            (0, 0, f.bigint(2)),
+            (0, 1, f.bigint(3)),
             (sequence_len - 1, 0, trace[trace.len() - 1][0].clone()),
             (sequence_len - 1, 1, trace[trace.len() - 1][1].clone()),
         ];
@@ -630,8 +649,10 @@ mod tests {
             c.sub(&next_state[1]);
             transition_constraints.push(c);
         }
-
+        let ins = Instant::now();
         let proof = stark.prove(&trace, &transition_constraints, &boundary_constraints);
+        println!("prove: {:?}", ins.elapsed());
         stark.verify(&proof, &transition_constraints, &boundary_constraints);
+        println!("verify: {:?}", ins.elapsed());
     }
 }

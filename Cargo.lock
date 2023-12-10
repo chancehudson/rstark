@@ -71,6 +71,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 
 [[package]]
+name = "crypto-bigint"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0dc92fb57ca44df6db8059111ab3af99a63d5d0f8375d9972e319a379c6bab76"
+dependencies = [
+ "rand_core",
+ "subtle",
+]
+
+[[package]]
 name = "crypto-common"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -238,6 +248,7 @@ name = "rstark"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "crypto-bigint",
  "getrandom",
  "num-bigint",
  "num-integer",

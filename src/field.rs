@@ -6,7 +6,7 @@ use std::sync::RwLock;
 
 #[derive(Serialize, Debug)]
 pub struct Field<T: FieldElement> {
-    p: T,
+    p: T::ParamsType,
     g: T,
     // generator, size size keyed to contents
     group_cache: RwLock<HashMap<(T, u32), Vec<T>>>,
@@ -16,15 +16,15 @@ pub struct Field<T: FieldElement> {
 }
 
 impl<T: FieldElement> Field<T> {
-    pub fn new(p: T, g: T) -> Field<T> {
+    pub fn new(g: T) -> Field<T> {
         let mut f = Field {
-            p,
+            p: g.get_params(),
             g,
             group_cache: RwLock::new(HashMap::new()),
             coset_cache: RwLock::new(HashMap::new()),
             generator_cache: HashMap::new(),
         };
-        if f.p.bits() <= 32 {
+        if T::from_params(&f.p).bits() <= 32 {
             // we're likely in the 101 field in tests
             // don't build the domain cache
             return f;
@@ -36,7 +36,7 @@ impl<T: FieldElement> Field<T> {
         let mut generators = Vec::new();
         for _ in 0..31 {
             start *= 2;
-            generators.push(f.generator(T::from_u32(start)));
+            generators.push(f.generator(T::from_u32(start, &f.p)));
             sizes.push(start);
         }
         let generators_inv = f.inv_batch(&generators);
@@ -48,14 +48,14 @@ impl<T: FieldElement> Field<T> {
     }
 
     pub fn bigint(&self, val: i32) -> T {
-        T::from_i32(val).modd(self.p())
+        T::from_i32(val, self.p())
     }
 
     pub fn biguint(&self, val: u32) -> T {
-        T::from_u32(val).modd(self.p())
+        T::from_u32(val, self.p())
     }
 
-    pub fn p(&self) -> &T {
+    pub fn p(&self) -> &T::ParamsType {
         &self.p
     }
 
@@ -63,40 +63,44 @@ impl<T: FieldElement> Field<T> {
         &self.g
     }
 
-    pub fn zero() -> T {
-        T::zero()
+    pub fn zero(&self) -> T {
+        T::zero(self.p())
     }
 
-    pub fn one() -> T {
-        T::one()
+    pub fn one(&self) -> T {
+        T::one(self.p())
+    }
+
+    pub fn two(&self) -> T {
+        T::two(self.p())
     }
 
     pub fn add(&self, v1: &T, v2: &T) -> T {
-        v1.add(v2, self.p())
+        v1.add(v2)
     }
 
     pub fn mul(&self, v1: &T, v2: &T) -> T {
-        v1.mul(v2, self.p())
+        v1.mul(v2)
     }
 
     pub fn sub(&self, v1: &T, v2: &T) -> T {
-        v1.sub(v2, self.p())
+        v1.sub(v2)
     }
 
     pub fn neg(&self, v: &T) -> T {
-        self.p.sub(v, self.p())
+        v.neg()
     }
 
     pub fn div(&self, v1: &T, v2: &T) -> T {
-        self.mul(v1, &self.inv(v2))
+        v1.div(v2)
     }
 
     // exponent should always be >= 0
     pub fn exp(&self, v: &T, e: &T) -> T {
-        if e == &Field::one() {
+        if e == &self.one() {
             v.clone()
         } else {
-            v.modpow(e, self.p())
+            v.modpow(e)
         }
     }
 
@@ -104,30 +108,27 @@ impl<T: FieldElement> Field<T> {
         if let Some(v) = self.generator_cache.get(size) {
             return v.clone();
         }
-        let g = self.generator(T::from_u32(*size));
+        let g = self.generator(T::from_u32(*size, self.p()));
         let g_inv = self.inv(&g);
         (g, g_inv)
     }
 
     pub fn generator(&self, size: T) -> T {
-        if size >= self.p {
-            panic!("requested subgroup is larger than field");
-        }
-        let numer = &self.p.sub(&T::one(), self.p());
-        let exp = numer.div(&size, self.p());
-        if exp.mul(&size, self.p()) != *numer {
+        let transformed_p = T::from_params(self.p());
+        let numer = &transformed_p.sub(&T::one(self.p()));
+        let exp = numer.div(&size);
+        if exp.mul(&size) != *numer {
             panic!("subgroup is not a divisor of field");
         }
         self.exp(&self.g, &exp)
     }
 
     pub fn inv(&self, v: &T) -> T {
-        let e_gcd = v.clone().extended_gcd(&self.p);
-        self.add(&e_gcd, &self.p)
+        v.inv()
     }
 
     pub fn inv_batch(&self, values: &Vec<T>) -> Vec<T> {
-        let mut last = T::one();
+        let mut last = T::one(self.p());
         let mut result = Vec::new();
         for v in values {
             result.push(last.clone());
@@ -147,18 +148,19 @@ impl<T: FieldElement> Field<T> {
     }
 
     pub fn sample(&self, input: T) -> T {
-        input.modd(self.p())
+        // input.modd(self.p())
+        input
     }
 
     pub fn sample_bytes(&self, input: &[u8]) -> T {
-        let mut out = T::zero();
+        let mut out = T::zero(self.p());
         for i in 0..16 {
-            let i_b = T::from_u32(i);
+            let i_b = T::from_u32(i, self.p());
             out = self.add(
                 &out,
                 &self.mul(
-                    &T::from_u32(input[i as usize] as u32),
-                    &self.exp(&T::two(), &i_b),
+                    &T::from_u32(input[i as usize] as u32, self.p()),
+                    &self.exp(&T::two(self.p()), &i_b),
                 ),
             );
         }
@@ -177,7 +179,7 @@ impl<T: FieldElement> Field<T> {
         if let Some(coset) = cache.get(&(size, offset.clone())) {
             return coset.clone();
         }
-        let generator = self.generator(T::from_u32(size));
+        let generator = self.generator(T::from_u32(size, self.p()));
         // build, insert, and return
         let domain = self.domain(&generator, size);
         let mut coset = Vec::new();
@@ -205,7 +207,7 @@ impl<T: FieldElement> Field<T> {
         }
         // build, insert, and return
         let mut domain = Vec::new();
-        domain.push(T::one());
+        domain.push(T::one(self.p()));
         for _ in 1..size {
             domain.push(self.mul(&domain[domain.len() - 1], generator));
         }
@@ -219,41 +221,48 @@ impl<T: FieldElement> Field<T> {
 mod tests {
     use num_bigint::{BigInt, Sign};
 
-    use crate::BigIntElement;
+    use crate::{to_crypto_element, to_crypto_params, BigIntElement, CryptoBigIntElement};
 
     use super::*;
 
+    fn test_field() -> Field<CryptoBigIntElement> {
+        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
+        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        Field::new(g)
+    }
+
     #[test]
     fn should_make_bigint() {
-        let p = BigIntElement(BigInt::from(101));
-        let f = Field::new(p, BigIntElement(BigInt::from(0)));
+        let f = test_field();
         assert_eq!(
             f.bigint(0),
-            BigIntElement(BigInt::new(Sign::Minus, vec!(0)))
+            to_crypto_element(BigIntElement(BigInt::new(Sign::Minus, vec!(0))), f.p())
         );
         assert_eq!(
             f.bigint(-29),
-            BigIntElement(BigInt::new(Sign::Plus, vec!(72)))
+            to_crypto_element(BigIntElement(BigInt::new(Sign::Plus, vec!(72))), f.p())
+        );
+        assert_eq!(
+            f.bigint(-145),
+            to_crypto_element(BigIntElement(BigInt::new(Sign::Plus, vec!(57))), f.p())
         );
         assert_eq!(
             f.bigint(32),
-            BigIntElement(BigInt::new(Sign::Plus, vec!(32)))
+            to_crypto_element(BigIntElement(BigInt::new(Sign::Plus, vec!(32))), f.p())
         );
         assert_eq!(
             f.biguint(0),
-            BigIntElement(BigInt::new(Sign::Minus, vec!(0)))
+            to_crypto_element(BigIntElement(BigInt::new(Sign::Minus, vec!(0))), f.p())
         );
         assert_eq!(
             f.biguint(32),
-            BigIntElement(BigInt::new(Sign::Plus, vec!(32)))
+            to_crypto_element(BigIntElement(BigInt::new(Sign::Plus, vec!(32))), f.p())
         );
     }
 
     #[test]
     fn should_add_two_elements() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
-        let f = Field::new(p, g);
+        let f = test_field();
 
         let x = f.bigint(40);
         let y = f.bigint(90);
@@ -263,9 +272,7 @@ mod tests {
 
     #[test]
     fn should_add_neg_elements() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
-        let f = Field::new(p, g);
+        let f = test_field();
 
         let x = f.bigint(40);
         let y = f.bigint(90);
@@ -274,9 +281,7 @@ mod tests {
     }
     #[test]
     fn should_mul_two_elements() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
-        let f = Field::new(p, g);
+        let f = test_field();
 
         let x = f.bigint(40);
         let y = f.bigint(90);
@@ -286,9 +291,7 @@ mod tests {
 
     #[test]
     fn should_sub_two_elements() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
-        let f = Field::new(p, g);
+        let f = test_field();
 
         let x = f.bigint(2);
         let y = f.bigint(20);
@@ -298,9 +301,8 @@ mod tests {
 
     #[test]
     fn should_get_generator() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let f_g = BigIntElement(BigInt::from(5));
-        let f = Field::new(p, f_g);
+        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
+        let f = Field::new(to_crypto_element(BigIntElement(BigInt::from(5)), &p));
 
         for i in 1..10 {
             let g = f.generator(f.biguint(u32::pow(2, i)));
@@ -310,14 +312,13 @@ mod tests {
 
     #[test]
     fn should_get_inverse() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let f_g = BigIntElement(BigInt::from(5));
-        let f = Field::new(p, f_g);
+        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
+        let f = Field::new(to_crypto_element(BigIntElement(BigInt::from(5)), &p));
 
         for i in 1..99 {
             let v = f.biguint(i);
             let inv = f.inv(&v);
-            assert_eq!(f.mul(&inv, &v), Field::one());
+            assert_eq!(f.mul(&inv, &v), f.bigint(1));
         }
     }
 }

@@ -52,7 +52,7 @@ impl<T: FieldElement> MPolynomial<T> {
     }
 
     pub fn trim(&mut self) {
-        let zero = T::zero();
+        let zero = self.field.zero();
         let mut to_remove = Vec::new();
         for (k, v) in self.exp_map.iter() {
             if v == &zero {
@@ -76,7 +76,7 @@ impl<T: FieldElement> MPolynomial<T> {
     }
 
     pub fn term(&mut self, coef: &T, exps: &Vec<u32>) -> &Self {
-        let zero = T::zero();
+        let zero = self.field.zero();
         let t = Self::trim_vars(exps);
         let existing = if let Some(v) = self.exp_map.get(&t) {
             v
@@ -111,7 +111,7 @@ impl<T: FieldElement> MPolynomial<T> {
 
     pub fn mul(&mut self, poly: &MPolynomial<T>) -> &Self {
         let mut new_exp = HashMap::new();
-        let zero = T::zero();
+        let zero = self.field.zero();
         for (exps1, coef1) in poly.exps() {
             for (exps2, coef2) in self.exps() {
                 let mut final_exps: Vec<u32> = Vec::new();
@@ -133,16 +133,19 @@ impl<T: FieldElement> MPolynomial<T> {
     }
 
     pub fn eval(&self, points: &[T]) -> T {
-        let mut out = T::zero();
+        let mut out = self.field.zero();
         for (exps, coef) in self.exps() {
             let mut inter = coef.clone();
             for i in 0..exps.len() {
                 if exps[i] == 0 {
                     continue;
                 }
-                inter = self
-                    .field
-                    .mul(&inter, &self.field.exp(&points[i], &T::from_u32(exps[i])));
+                inter = self.field.mul(
+                    &inter,
+                    &self
+                        .field
+                        .exp(&points[i], &T::from_u32(exps[i], self.field.p())),
+                );
             }
             out = self.field.add(&out, &inter);
         }
@@ -163,7 +166,7 @@ impl<T: FieldElement> MPolynomial<T> {
             }
         }
         let mut one = Polynomial::new(&self.field);
-        one.term(&T::one(), 0);
+        one.term(&self.field.one(), 0);
         let mut power_map = Vec::new();
         for (i, d) in degrees.iter().enumerate() {
             let mut poly_powers = Vec::new();
@@ -210,7 +213,7 @@ impl<T: FieldElement> MPolynomial<T> {
             let mut p = MPolynomial::new(field);
             let mut exps: Vec<u32> = vec![0; usize::try_from(i).unwrap()];
             exps.push(1);
-            p.term(&T::one(), &exps);
+            p.term(&field.one(), &exps);
             out.push(p);
         }
         out
@@ -221,41 +224,40 @@ impl<T: FieldElement> MPolynomial<T> {
 mod tests {
     use num_bigint::BigInt;
 
-    use crate::BigIntElement;
+    use crate::{to_crypto_element, to_crypto_params, BigIntElement};
 
     use super::*;
 
     #[test]
     fn should_add_sub_multipolynomials() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
-        let f = Rc::new(Field::new(p, g));
-
+        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
+        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let f = Rc::new(Field::new(g));
         // 4x + 2y^2 + 9
         let mut poly1 = MPolynomial::new(&f);
-        poly1.term(&BigIntElement(BigInt::from(4)), &vec![1]);
-        poly1.term(&BigIntElement(BigInt::from(2)), &vec![0, 2]);
-        poly1.term(&BigIntElement(BigInt::from(9)), &vec![0]);
+        poly1.term(&f.bigint(4), &vec![1]);
+        poly1.term(&f.bigint(2), &vec![0, 2]);
+        poly1.term(&f.bigint(9), &vec![0]);
 
         // 2x^2 + y^2 + 99
         let mut poly2 = MPolynomial::new(&f);
-        poly2.term(&BigIntElement(BigInt::from(2)), &vec![2]);
-        poly2.term(&BigIntElement(BigInt::from(1)), &vec![0, 2]);
-        poly2.term(&BigIntElement(BigInt::from(99)), &vec![0]);
+        poly2.term(&f.bigint(2), &vec![2]);
+        poly2.term(&f.bigint(1), &vec![0, 2]);
+        poly2.term(&f.bigint(99), &vec![0]);
 
         // 2x^2 + 4x + 3y^2 + 7
         let mut expected_add = MPolynomial::new(&f);
-        expected_add.term(&BigIntElement(BigInt::from(2)), &vec![2]);
-        expected_add.term(&BigIntElement(BigInt::from(4)), &vec![1]);
-        expected_add.term(&BigIntElement(BigInt::from(3)), &vec![0, 2]);
-        expected_add.term(&BigIntElement(BigInt::from(108)), &vec![0]);
+        expected_add.term(&f.bigint(2), &vec![2]);
+        expected_add.term(&f.bigint(4), &vec![1]);
+        expected_add.term(&f.bigint(3), &vec![0, 2]);
+        expected_add.term(&f.bigint(108), &vec![0]);
 
         // -2x^2 + y^2 + 4x - 90
         let mut expected_sub = MPolynomial::new(&f);
-        expected_sub.term(&BigIntElement(BigInt::from(4)), &vec![1]);
-        expected_sub.term(&BigIntElement(BigInt::from(-2)), &vec![2]);
-        expected_sub.term(&BigIntElement(BigInt::from(1)), &vec![0, 2]);
-        expected_sub.term(&BigIntElement(BigInt::from(-90)), &vec![0]);
+        expected_sub.term(&f.bigint(4), &vec![1]);
+        expected_sub.term(&f.bigint(-2), &vec![2]);
+        expected_sub.term(&f.bigint(1), &vec![0, 2]);
+        expected_sub.term(&f.bigint(-90), &vec![0]);
 
         assert!(poly1.clone().add(&poly2).is_equal(&expected_add));
         assert!(poly1.clone().sub(&poly2).is_equal(&expected_sub));
@@ -263,106 +265,98 @@ mod tests {
 
     #[test]
     fn should_mul_multipolynomials() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
-        let f = Rc::new(Field::new(p, g));
+        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
+        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let f = Rc::new(Field::new(g));
 
         // 4x + 2y^2 + 9
         let mut poly1 = MPolynomial::new(&f);
-        poly1.term(&BigIntElement(BigInt::from(4)), &vec![1]);
-        poly1.term(&BigIntElement(BigInt::from(2)), &vec![0, 2]);
-        poly1.term(&BigIntElement(BigInt::from(9)), &vec![0]);
+        poly1.term(&f.bigint(4), &vec![1]);
+        poly1.term(&f.bigint(2), &vec![0, 2]);
+        poly1.term(&f.bigint(9), &vec![0]);
 
         // 2x^2 + y^2 + 99
         let mut poly2 = MPolynomial::new(&f);
-        poly2.term(&BigIntElement(BigInt::from(2)), &vec![2]);
-        poly2.term(&BigIntElement(BigInt::from(1)), &vec![0, 2]);
-        poly2.term(&BigIntElement(BigInt::from(99)), &vec![0]);
+        poly2.term(&f.bigint(2), &vec![2]);
+        poly2.term(&f.bigint(1), &vec![0, 2]);
+        poly2.term(&f.bigint(99), &vec![0]);
 
         // 8x^3 + 4xy^2 + 396x + 4x^2y^2 + 2y^4 + 198y^2 + 18x^2 + 9y^2 + 891
         let mut expected = MPolynomial::new(&f);
-        expected.term(&BigIntElement(BigInt::from(8)), &vec![3]);
-        expected.term(&BigIntElement(BigInt::from(4)), &vec![1, 2]);
-        expected.term(&BigIntElement(BigInt::from(396)), &vec![1]);
-        expected.term(&BigIntElement(BigInt::from(4)), &vec![2, 2]);
-        expected.term(&BigIntElement(BigInt::from(2)), &vec![0, 4]);
-        expected.term(&BigIntElement(BigInt::from(198)), &vec![0, 2]);
-        expected.term(&BigIntElement(BigInt::from(18)), &vec![2]);
-        expected.term(&BigIntElement(BigInt::from(9)), &vec![0, 2]);
-        expected.term(&BigIntElement(BigInt::from(891)), &vec![0]);
+        expected.term(&f.bigint(8), &vec![3]);
+        expected.term(&f.bigint(4), &vec![1, 2]);
+        expected.term(&f.bigint(396), &vec![1]);
+        expected.term(&f.bigint(4), &vec![2, 2]);
+        expected.term(&f.bigint(2), &vec![0, 4]);
+        expected.term(&f.bigint(198), &vec![0, 2]);
+        expected.term(&f.bigint(18), &vec![2]);
+        expected.term(&f.bigint(9), &vec![0, 2]);
+        expected.term(&f.bigint(891), &vec![0]);
 
         assert!(poly1.clone().mul(&poly2).is_equal(&expected));
     }
 
     #[test]
     fn should_eval_multipolynomial() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
-        let f = Rc::new(Field::new(p.clone(), g));
+        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
+        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let f = Rc::new(Field::new(g));
 
         // 4x + 2y^2 + 9
         let mut poly = MPolynomial::new(&f);
-        poly.term(&BigIntElement(BigInt::from(4)), &vec![1]);
-        poly.term(&BigIntElement(BigInt::from(2)), &vec![0, 2]);
-        poly.term(&BigIntElement(BigInt::from(9)), &vec![0]);
+        poly.term(&f.bigint(4), &vec![1]);
+        poly.term(&f.bigint(2), &vec![0, 2]);
+        poly.term(&f.bigint(9), &vec![0]);
 
         // x: 50, y: 20
         // 4*50 + 2*20^2 + 9
-        let expected = BigIntElement(BigInt::from(1009)).modd(&p);
+        let expected = f.bigint(1009);
 
-        assert_eq!(
-            poly.eval(&[
-                BigIntElement(BigInt::from(50)),
-                BigIntElement(BigInt::from(20))
-            ]),
-            expected
-        );
+        assert_eq!(poly.eval(&[f.bigint(50), f.bigint(20)]), expected);
     }
 
     #[test]
     fn should_eval_symbolic_multipolynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
-
+        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
+        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let f = Rc::new(Field::new(g));
         // 4x + 2y^2 + 9
         let mut poly = MPolynomial::new(&f);
-        poly.term(&BigIntElement(BigInt::from(4)), &vec![1]);
-        poly.term(&BigIntElement(BigInt::from(2)), &vec![0, 2]);
-        poly.term(&BigIntElement(BigInt::from(9)), &vec![0]);
+        poly.term(&f.bigint(4), &vec![1]);
+        poly.term(&f.bigint(2), &vec![0, 2]);
+        poly.term(&f.bigint(9), &vec![0]);
 
         let mut x = Polynomial::new(&f);
-        x.term(&BigIntElement(BigInt::from(5)), 2);
+        x.term(&f.bigint(5), 2);
 
         let mut y = Polynomial::new(&f);
-        y.term(&BigIntElement(BigInt::from(9)), 6);
+        y.term(&f.bigint(9), 6);
 
         // x: 5x^2, y: 9x^6
         // 20x^2 + 162x^12 + 9
         let mut expected = Polynomial::new(&f);
-        expected.term(&BigIntElement(BigInt::from(20)), 2);
-        expected.term(&BigIntElement(BigInt::from(162)), 12);
-        expected.term(&BigIntElement(BigInt::from(9)), 0);
+        expected.term(&f.bigint(20), 2);
+        expected.term(&f.bigint(162), 12);
+        expected.term(&f.bigint(9), 0);
 
         assert!(poly.eval_symbolic(&vec!(x, y)).is_equal(&expected));
     }
 
     #[test]
     fn should_make_multipolynomial_from_polynomial() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
-        let f = Rc::new(Field::new(p, g));
-
+        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
+        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let f = Rc::new(Field::new(g));
         // 4x + 8x^2 + 9
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigIntElement(BigInt::from(4)), 1);
-        poly.term(&BigIntElement(BigInt::from(8)), 2);
-        poly.term(&BigIntElement(BigInt::from(9)), 0);
+        poly.term(&f.bigint(4), 1);
+        poly.term(&f.bigint(8), 2);
+        poly.term(&f.bigint(9), 0);
 
         let mpoly = MPolynomial::from_poly(&poly);
 
         for i in 0..20 {
-            let v = BigIntElement(BigInt::from(i));
+            let v = f.bigint(i);
             assert_eq!(mpoly.eval(&vec!(v.clone())), poly.eval(&v));
         }
     }
