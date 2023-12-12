@@ -1,18 +1,14 @@
-use num_bigint::BigInt;
 use rstark::field::Field;
 use rstark::mpolynomial::MPolynomial;
 use rstark::stark::Stark;
-use rstark::{BigIntElement, FieldElement};
+use rstark::field_element::{G};
 use std::rc::Rc;
 
 fn main() {
-    let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
-    let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
-    let f = Rc::new(Field::new(p, g.clone()));
-
+    let f = Rc::new(Field::new(G));
     let register_count = 3;
     let sequence_len = 2;
-    let stark = Stark::new(&g.clone(), &f, register_count, sequence_len, 128, 18, 2);
+    let stark = Stark::new(&G, &f, register_count, sequence_len, 128, 18, 2);
     // generate a proof that two numbers (a, b) are not equal
     //
     // to do this use 3 registers
@@ -45,7 +41,7 @@ fn main() {
     let mut transition_constraints = Vec::new();
     {
         let mut one = MPolynomial::new(&f);
-        one.term(&BigIntElement::zero(), &vec![0]);
+        one.term(&f.one(), &vec![0]);
         one.sub(
             &prev_state[2]
                 .clone()

@@ -1,4 +1,4 @@
-use crate::{field::Field, FieldElement};
+use crate::{field::Field, field_element::FieldElement};
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
@@ -24,7 +24,7 @@ impl<T: FieldElement> Polynomial<T> {
     }
 
     pub fn degree(&self) -> usize {
-        let zero = Field::zero();
+        let zero = self.field().zero();
         for i in 0..self.coefs.len() {
             let index = (self.coefs.len() - 1) - i;
             if self.coefs[index] != zero {
@@ -35,7 +35,7 @@ impl<T: FieldElement> Polynomial<T> {
     }
 
     pub fn is_zero(&self) -> bool {
-        let zero = Field::zero();
+        let zero = self.field().zero();
         for i in 0..self.coefs.len() {
             if self.coefs[i] != zero {
                 return false;
@@ -45,7 +45,7 @@ impl<T: FieldElement> Polynomial<T> {
     }
 
     pub fn is_equal(&self, poly: &Polynomial<T>) -> bool {
-        let zero = Field::zero();
+        let zero = self.field().zero();
         let larger;
         let smaller;
         if poly.coefs().len() > self.coefs().len() {
@@ -72,7 +72,7 @@ impl<T: FieldElement> Polynomial<T> {
         let s = usize::try_from(exp).unwrap();
         // expand to one longer to handle 0 exponents
         if self.coefs.len() < s + 1 {
-            self.coefs.resize(s + 1, Field::zero());
+            self.coefs.resize(s + 1, self.field().zero());
         }
         self.coefs[s] = self.field.add(&self.coefs[s], coef);
         self
@@ -109,7 +109,7 @@ impl<T: FieldElement> Polynomial<T> {
     // e.g. multiplying by x^5
     pub fn shift_and_clone(&self, degree: u32) -> Self {
         let degree_usize = usize::try_from(degree).unwrap();
-        let mut shifted_coefs = vec![T::zero(); degree_usize];
+        let mut shifted_coefs = vec![self.field().zero(); degree_usize];
         shifted_coefs.extend(self.coefs.clone());
         let mut out = Polynomial::new(&self.field);
         out.coefs = shifted_coefs;
@@ -118,7 +118,7 @@ impl<T: FieldElement> Polynomial<T> {
 
     pub fn mul(&mut self, poly: &Polynomial<T>) -> &Self {
         let mut out = Vec::new();
-        out.resize(self.coefs.len() + poly.coefs().len(), Field::zero());
+        out.resize(self.coefs.len() + poly.coefs().len(), self.field().zero());
         for i in 0..poly.coefs().len() {
             // self.mul_term(&poly.coefs()[i], i);
             for j in 0..self.coefs.len() {
@@ -143,7 +143,7 @@ impl<T: FieldElement> Polynomial<T> {
 
     pub fn exp(&mut self, v: usize) -> &Self {
         let mut out = Polynomial::new(&self.field);
-        out.term(&T::one(), 0);
+        out.term(&self.field().one(), 0);
         for _ in 0..v {
             out.mul(self);
         }
@@ -169,8 +169,12 @@ impl<T: FieldElement> Polynomial<T> {
             .iter()
             .enumerate()
             .map(|(exp, coef)| {
-                self.field
-                    .mul(&self.field.exp(&v, &T::from_u32(exp as u32)), coef)
+                self.field.mul(
+                    &self
+                        .field
+                        .exp(&v, &T::from_u32(exp as u32, self.field().p())),
+                    coef,
+                )
             })
             .collect();
         self
@@ -192,7 +196,7 @@ impl<T: FieldElement> Polynomial<T> {
     // trim trailing zero coefficient
     pub fn trim(&mut self) {
         let mut new_len = self.coefs.len();
-        let zero = Field::zero();
+        let zero = self.field().zero();
         for i in (0..self.coefs.len()).rev() {
             if self.coefs[i] != zero {
                 break;
@@ -206,7 +210,7 @@ impl<T: FieldElement> Polynomial<T> {
     // https://en.wikipedia.org/wiki/Horner%27s_method
     pub fn eval(&self, v: &T) -> T {
         if self.coefs.is_empty() {
-            return T::zero();
+            return self.field().zero();
         }
         if self.coefs.len() == 1 {
             return self.coefs[0].clone();
@@ -287,7 +291,7 @@ impl<T: FieldElement> Polynomial<T> {
     // Evaluate a polynomial over a multiplicative subgroup
     // domain cannot be a coset
     pub fn eval_batch_fft(&self, domain: &Vec<T>) -> Vec<T> {
-        Polynomial::eval_fft(self.coefs(), domain, &self.field)
+        Self::eval_fft(self.coefs(), domain, &self.field)
     }
 
     pub fn eval_fft_batch(
@@ -297,12 +301,12 @@ impl<T: FieldElement> Polynomial<T> {
     ) -> Vec<Vec<T>> {
         let mut out = Vec::new();
         for _ in 0..polys.len() {
-            let mut v = vec![T::zero(); domain.len()];
+            let mut v = vec![field.zero(); domain.len()];
             v.reserve(5);
             out.push(v);
         }
-        let mut scratch1 = T::zero();
-        let mut scratch2 = T::zero();
+        let mut scratch1 = field.zero();
+        let mut scratch2 = field.zero();
         Self::eval_fft_batch_(
             polys,
             domain,
@@ -319,7 +323,7 @@ impl<T: FieldElement> Polynomial<T> {
     }
 
     pub fn eval_fft(coefs: &Vec<T>, domain: &Vec<T>, field: &Rc<Field<T>>) -> Vec<T> {
-        let mut out = vec![T::zero(); domain.len()];
+        let mut out = vec![T::from_params(field.p()); domain.len()];
         Self::eval_fft_(coefs, domain, field, 1, 0, 0, domain.len() / 2, &mut out);
         out
     }
@@ -381,8 +385,8 @@ impl<T: FieldElement> Polynomial<T> {
                 // use this complicated scratch system to avoid
                 // heap (de)allocations
                 *scratch1 = field.mul(&out[j][right_index], &domain[i * slice_len]);
-                *scratch2 = out[j][left_index].sub(scratch1, field.p());
-                out[j][left_index] = out[j][left_index].add(scratch1, field.p());
+                *scratch2 = out[j][left_index].sub(scratch1);
+                out[j][left_index] = out[j][left_index].add(scratch1);
                 out[j][right_index].clone_from(scratch2);
             }
         }
@@ -442,8 +446,8 @@ impl<T: FieldElement> Polynomial<T> {
                 let x = &out[left_dest + i];
                 let y = &out[right_dest + i];
                 let y_root = field.mul(y, &domain[i * slice_len]);
-                left_out = x.add(&y_root, field.p());
-                right_out = x.sub(&y_root, field.p());
+                left_out = x.add(&y_root);
+                right_out = x.sub(&y_root);
             }
             out[left_dest + i] = left_out;
             out[right_dest + i] = right_out;
@@ -454,7 +458,7 @@ impl<T: FieldElement> Polynomial<T> {
         if coefs.len() == 1 {
             return vec![coefs[0].clone()];
         }
-        let len_inv = field.inv(&T::from_u32(u32::try_from(coefs.len()).unwrap()));
+        let len_inv = field.inv(&T::from_u32(u32::try_from(coefs.len()).unwrap(), field.p()));
         let out = Self::eval_fft(coefs, domain_inv, field);
         out.into_iter().map(|v| field.mul(&v, &len_inv)).collect()
     }
@@ -554,7 +558,7 @@ impl<T: FieldElement> Polynomial<T> {
     // remove and return the largest non-zero coefficient
     // coef, exp
     pub fn pop_term(&mut self) -> (T, usize) {
-        let zero = Field::zero();
+        let zero = self.field().zero();
         for i in 0..self.coefs.len() {
             let index = (self.coefs.len() - 1) - i;
             if self.coefs[index] != zero {
@@ -600,7 +604,7 @@ impl<T: FieldElement> Polynomial<T> {
             panic!("lagrange mismatch x/y array length");
         }
         let mut numerator = Polynomial::new(field);
-        numerator.term(&T::one(), 0);
+        numerator.term(&field.one(), 0);
         for v in x_vals {
             let mut poly = Polynomial::new(field);
             poly.term(&field.bigint(1), 1);
@@ -609,12 +613,12 @@ impl<T: FieldElement> Polynomial<T> {
         }
         let mut polynomials = Vec::new();
         for i in 0..x_vals.len() {
-            let mut denominator = Field::one();
+            let mut denominator = field.one();
             for j in 0..x_vals.len() {
                 if i == j {
                     continue;
                 }
-                denominator = field.mul(&denominator, &x_vals[i].sub(&x_vals[j], field.p()));
+                denominator = field.mul(&denominator, &x_vals[i].sub(&x_vals[j]));
             }
             let mut n = Polynomial::new(field);
             n.term(&field.bigint(1), 1);
@@ -798,7 +802,7 @@ impl<T: FieldElement> Polynomial<T> {
         if points.len() == 1 {
             let mut p = Polynomial::new(field);
             p.term(&field.neg(&points[0]), 0);
-            p.term(&T::one(), 1);
+            p.term(&field.one(), 1);
             return p;
         }
         let half = points.len() >> 1;
@@ -813,9 +817,9 @@ impl<T: FieldElement> Polynomial<T> {
 
     pub fn zeroifier_slice(points: &[T], field: &Rc<Field<T>>) -> Polynomial<T> {
         let mut out = Polynomial::new(field);
-        out.term(&T::one(), 0);
+        out.term(&field.one(), 0);
         let mut x = Polynomial::new(field);
-        x.term(&T::one(), 1);
+        x.term(&field.one(), 1);
         for p in points {
             out.mul(x.clone().term(&field.neg(p), 0));
         }
@@ -825,26 +829,25 @@ impl<T: FieldElement> Polynomial<T> {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
-
-    use crate::BigIntElement;
+    use crate::field_element::{ParamWrapper, CryptoBigIntElement, UC};
+    use crypto_bigint::modular::runtime_mod::{DynResidueParams};
 
     use super::*;
 
     #[test]
     fn should_test_colinearity() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigIntElement(BigInt::from(-9)), 0);
-        poly.term(&BigIntElement(BigInt::from(2)), 1);
+        poly.term(&f.bigint(-9), 0);
+        poly.term(&f.bigint(2), 1);
         let mut x_vals = Vec::new();
         let mut y_vals = Vec::new();
         for i in 0..3 {
-            x_vals.push(BigIntElement::from_i32(i));
-            y_vals.push(poly.eval(&BigIntElement::from_i32(i)));
+            x_vals.push(f.bigint(i));
+            y_vals.push(poly.eval(&f.bigint(i)));
         }
         assert!(Polynomial::test_colinearity(&x_vals, &y_vals, &f));
         assert!(Polynomial::test_colinearity_batch(
@@ -856,26 +859,26 @@ mod tests {
 
     #[test]
     fn should_compose_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut root = Polynomial::new(&f);
-        root.term(&BigIntElement(BigInt::from(99)), 0);
-        root.term(&BigIntElement(BigInt::from(2)), 1);
-        root.term(&BigIntElement(BigInt::from(4)), 2);
+        root.term(&f.bigint(99), 0);
+        root.term(&f.bigint(2), 1);
+        root.term(&f.bigint(4), 2);
 
         let mut inpoly = Polynomial::new(&f);
-        inpoly.term(&BigIntElement(BigInt::from(2)), 2);
-        inpoly.term(&BigIntElement(BigInt::from(12)), 0);
+        inpoly.term(&f.bigint(2), 2);
+        inpoly.term(&f.bigint(12), 0);
 
         let mut expected = Polynomial::new(&f);
-        expected.term(&BigIntElement(BigInt::from(99)), 0);
-        expected.add(&inpoly.clone().mul_scalar(&BigIntElement(BigInt::from(2))));
+        expected.term(&f.bigint(99), 0);
+        expected.add(&inpoly.clone().mul_scalar(&f.bigint(2)));
         {
             let mut i = inpoly.clone();
             i.exp(2);
-            i.mul_scalar(&BigIntElement(BigInt::from(4)));
+            i.mul_scalar(&f.bigint(4));
             expected.add(&i);
         }
 
@@ -884,31 +887,25 @@ mod tests {
 
     #[test]
     fn should_exp_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigIntElement(BigInt::from(2)), 0);
+        poly.term(&f.bigint(2), 0);
 
         for i in 0..10 {
             let mut expected = Polynomial::new(&f);
-            expected.term(
-                &f.exp(
-                    &BigIntElement(BigInt::from(2)),
-                    &BigIntElement(BigInt::from(i)),
-                ),
-                0,
-            );
-            assert!(poly.clone().exp(i).is_equal(&expected));
+            expected.term(&f.exp(&f.bigint(2), &f.bigint(i)), 0);
+            assert!(poly.clone().exp(i as usize).is_equal(&expected));
         }
     }
 
     #[test]
     fn should_scale_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
         poly.term(&f.bigint(1), 0);
@@ -924,14 +921,14 @@ mod tests {
         expected.term(&f.bigint(8), 3);
         expected.term(&f.bigint(16), 4);
 
-        assert!(expected.is_equal(poly.scale(BigIntElement(BigInt::from(2)))));
+        assert!(expected.is_equal(poly.scale(f.bigint(2))));
     }
 
     #[test]
     fn should_interpolate_lagrange() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let size = 32;
         let gen = f.generator(f.bigint(size));
@@ -952,9 +949,9 @@ mod tests {
     #[test]
     #[should_panic]
     fn should_fail_to_div_by_zero() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
         poly.term(&f.bigint(1), 0);
@@ -966,9 +963,9 @@ mod tests {
 
     #[test]
     fn should_divide_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut poly1 = Polynomial::new(&f);
         poly1.term(&f.bigint(1), 2);
@@ -994,9 +991,9 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         // 9x^3 - 4x^2 - 20
         let mut poly = Polynomial::new(&f);
@@ -1010,9 +1007,9 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial_with_batch_fast() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
         for i in 0..50 {
@@ -1022,7 +1019,7 @@ mod tests {
         let size = 2_u32.pow(7);
         let mut g_domain = Vec::new();
         for i in 0..size {
-            g_domain.push(BigIntElement::from_u32(i));
+            g_domain.push(f.biguint(i));
         }
 
         let actual = poly.eval_batch(&g_domain);
@@ -1034,9 +1031,9 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial_with_fft() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
         for i in 0..50 {
@@ -1044,10 +1041,10 @@ mod tests {
         }
 
         let size = 2_u32.pow(8);
-        let sub_g = f.generator(BigIntElement::from_u32(size));
+        let sub_g = f.generator(f.biguint(size));
         let mut g_domain = Vec::new();
         for i in 0..size {
-            g_domain.push(f.exp(&sub_g, &BigIntElement::from_u32(i)));
+            g_domain.push(f.exp(&sub_g, &f.biguint(i)));
         }
 
         let actual = poly.eval_batch(&g_domain);
@@ -1059,9 +1056,9 @@ mod tests {
 
     #[test]
     fn should_check_polynomial_equality() {
-        let p = BigIntElement(BigInt::from(101));
-        let g = BigIntElement(BigInt::from(0));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(101_u128)));
+        let g = CryptoBigIntElement::from_u32(0, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut poly1 = Polynomial::new(&f);
         poly1.term(&f.bigint(-20), 0);
@@ -1075,9 +1072,9 @@ mod tests {
 
     #[test]
     fn should_add_polynomials() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         // 2x^2 - 20
         let mut poly1 = Polynomial::new(&f);
@@ -1106,9 +1103,9 @@ mod tests {
 
     #[test]
     fn should_subtract_polynomials() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         // 2x^2 - 20
         let mut poly1 = Polynomial::new(&f);
@@ -1129,8 +1126,6 @@ mod tests {
         let mut expected1 = Polynomial::new(&f);
         expected1.term(&f.bigint(-9), 3);
         expected1.term(&f.bigint(6), 2);
-        println!("expected1=={:?}", expected1.coefs());
-        println!("out1=={:?}", out1.coefs());
         assert!(expected1.is_equal(&out1));
 
         let mut expected2 = Polynomial::new(&f);
@@ -1141,9 +1136,9 @@ mod tests {
 
     #[test]
     fn should_multiply_polynomials() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         // 2x^2 - 20
         let mut poly1 = Polynomial::new(&f);
@@ -1170,9 +1165,9 @@ mod tests {
 
     #[test]
     fn should_multiply_polynomials_fft() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let mut poly1 = Polynomial::new(&f);
         let mut poly2 = Polynomial::new(&f);
@@ -1190,26 +1185,26 @@ mod tests {
 
     #[test]
     fn should_build_zeroifier_polynomial() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
 
         let s = 128;
-        let size = BigIntElement(BigInt::from(s));
+        let size = f.biguint(s);
         let domain_g = f.generator(size);
         let mut domain = Vec::new();
         for i in 0..s {
-            domain.push(f.exp(&domain_g, &BigIntElement(BigInt::from(i))));
+            domain.push(f.exp(&domain_g, &f.biguint(i)));
         }
 
         let poly = Polynomial::zeroifier(&domain, &f);
         for i in 0..s {
-            assert_eq!(poly.eval(&domain[i]), BigIntElement::zero());
+            assert_eq!(poly.eval(&domain[i as usize]), f.zero());
         }
 
         let mut is_zero = true;
         for i in poly.coefs() {
-            if i != &BigIntElement::zero() {
+            if i != &f.zero() {
                 is_zero = false;
             }
         }
@@ -1218,20 +1213,19 @@ mod tests {
 
     #[test]
     fn should_build_zeroifier_polynomial_domain() {
-        let p = BigIntElement(BigInt::from(3221225473_u32));
-        let g = BigIntElement(BigInt::from(5));
-        let f = Rc::new(Field::new(p, g));
-
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Rc::new(Field::new(g));
         let size = 128_u32;
-        let generator = f.generator(BigIntElement::from_u32(size));
+        let generator = f.generator(f.biguint(size));
         let domain = f.domain(&generator, size);
         let zeroifier = Polynomial::zeroifier(&domain, &f);
         let mut zeroifier_fft = Polynomial::zeroifier_fft(&domain, &f);
         zeroifier_fft.trim();
 
         for v in domain {
-            assert_eq!(BigIntElement::zero(), zeroifier_fft.eval(&v));
-            assert_eq!(BigIntElement::zero(), zeroifier.eval(&v));
+            assert_eq!(f.zero(), zeroifier_fft.eval(&v));
+            assert_eq!(f.zero(), zeroifier.eval(&v));
         }
 
         assert!(zeroifier.is_equal(&zeroifier_fft));

@@ -2,7 +2,7 @@ use crate::channel::Channel;
 use crate::field::Field;
 use crate::polynomial::Polynomial;
 use crate::tree::Tree;
-use crate::FieldElement;
+use crate::field_element::FieldElement;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -61,7 +61,7 @@ impl<T: FieldElement> Fri<T> {
             panic!("initial codeword does not match domain len");
         }
         let codewords = self.commit(codeword, channel);
-        let top_indices = Self::sample_indices(
+        let top_indices = self.sample_indices(
             &channel.prover_hash(),
             codewords[1].len().try_into().unwrap(),
             codewords[codewords.len() - 1].len().try_into().unwrap(),
@@ -127,7 +127,7 @@ impl<T: FieldElement> Fri<T> {
     fn commit(&self, codeword: &[T], channel: &mut Channel) -> Vec<Vec<T>> {
         let mut codewords = Vec::new();
         let mut codeword = codeword.to_owned();
-        let two_inv = self.field.inv(&T::two());
+        let two_inv = self.field.inv(&self.field.two());
 
         // invert the entire domain using repeated multiplications
         // e.g. 1/4 = (1/2) * (1/2)
@@ -167,13 +167,13 @@ impl<T: FieldElement> Fri<T> {
                         val,
                         &self
                             .field
-                            .add(&Field::one(), &self.field.mul(&alpha, &inv_omega)),
+                            .add(&self.field.one(), &self.field.mul(&alpha, &inv_omega)),
                     );
                     //  (one - alpha / (offset * (omega^i)) ) * codeword[len(codeword)//2 + i] ) for i in range(len(codeword)//2)]
                     let b = self.field.mul(
                         &self
                             .field
-                            .sub(&Field::one(), &self.field.mul(&alpha, &inv_omega)),
+                            .sub(&self.field.one(), &self.field.mul(&alpha, &inv_omega)),
                         &codeword[(codeword.len() >> 1) + index],
                     );
                     self.field.mul(&two_inv, &self.field.add(&a, &b))
@@ -193,7 +193,13 @@ impl<T: FieldElement> Fri<T> {
         codewords
     }
 
-    fn sample_indices(seed: &[u8; 32], size: u32, reduced_size: u32, count: u32) -> Vec<u32> {
+    fn sample_indices(
+        &self,
+        seed: &[u8; 32],
+        size: u32,
+        reduced_size: u32,
+        count: u32,
+    ) -> Vec<u32> {
         if count > 2 * reduced_size {
             panic!("not enough entropy");
         }
@@ -207,9 +213,15 @@ impl<T: FieldElement> Fri<T> {
         while indices.len() < (count as usize) {
             let mut hasher = blake3::Hasher::new();
             hasher.update(seed);
-            hasher.update(&T::from_u32(counter).to_bytes_le());
-            let v = T::from_bytes_le(hasher.finalize().as_bytes());
-            let index = v.modd(&T::from_u32(size)).to_u32();
+            hasher.update(&T::from_u32(counter, self.field.p()).to_bytes_le());
+            let bytes = hasher.finalize().as_bytes().clone();
+            let mut v = 0_u32;
+            // TODO: double check this
+            for i in 0..4 {
+                v += u32::try_from(bytes[i]).unwrap() << 8*i;
+            }
+            // let v = T::from_bytes_le(hasher.finalize().as_bytes(), self.field.p()).to_u32();
+            let index = v % size;
             let reduced_index = index % reduced_size;
             counter += 1;
             reduced_indices.entry(reduced_index).or_insert_with(|| {
@@ -249,7 +261,7 @@ impl<T: FieldElement> Fri<T> {
         if self.field.inv(&omega_domain[omega_start_index])
             != self.field.exp(
                 &omega_domain[omega_start_index],
-                &T::from_u32((last_codeword.len() - 1) as u32),
+                &T::from_u32((last_codeword.len() - 1) as u32, self.field.p()),
             )
         {
             panic!("omega order incorrect");
@@ -266,11 +278,14 @@ impl<T: FieldElement> Fri<T> {
 
         let poly = Polynomial::interpolate_fft(
             &last_domain,
-            &last_codeword.iter().map(|v| T::from_bytes_le(v)).collect(),
+            &last_codeword
+                .iter()
+                .map(|v| T::from_bytes_le(v, self.field.p()))
+                .collect(),
             &self.field,
         );
         for i in 0..last_domain.len() {
-            if poly.eval(&last_domain[i]) != T::from_bytes_le(&last_codeword[i]) {
+            if poly.eval(&last_domain[i]) != T::from_bytes_le(&last_codeword[i], self.field.p()) {
                 panic!("interpolated polynomial is incorrect");
             }
         }
@@ -278,7 +293,7 @@ impl<T: FieldElement> Fri<T> {
             panic!("last codeword does not match polynomial of low enough degree");
         }
 
-        let top_indices = Self::sample_indices(
+        let top_indices = self.sample_indices(
             &channel.verifier_hash(),
             self.domain_len >> 1,
             self.domain_len >> (self.round_count() - 1),
@@ -303,9 +318,9 @@ impl<T: FieldElement> Fri<T> {
             let mut cc = Vec::new();
             for j in 0..usize::try_from(self.colinearity_test_count).unwrap() {
                 let y_points_msg = channel.pull_path();
-                let ay = T::from_bytes_le(&y_points_msg[0]);
-                let by = T::from_bytes_le(&y_points_msg[1]);
-                let cy = T::from_bytes_le(&y_points_msg[2]);
+                let ay = T::from_bytes_le(&y_points_msg[0], self.field.p());
+                let by = T::from_bytes_le(&y_points_msg[1], self.field.p());
+                let cy = T::from_bytes_le(&y_points_msg[2], self.field.p());
                 aa.push(ay.clone());
                 bb.push(by.clone());
                 cc.push(cy.clone());
@@ -370,20 +385,21 @@ impl<T: FieldElement> Fri<T> {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
-
-    use crate::BigIntElement;
+    use crate::field_element::{ParamWrapper, CryptoBigIntElement, UC};
+    use crypto_bigint::modular::runtime_mod::{DynResidue, DynResidueParams};
 
     use super::*;
 
     #[test]
     fn should_make_verify_fri_proof() {
         let mut channel = Channel::new();
-        let p = BigIntElement(BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119));
-        let g = BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128));
-        let f = Rc::new(Field::new(p, g.clone()));
+
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(1_u128 + 407_u128 * 2_u128.pow(119))));
+        let g = CryptoBigIntElement(DynResidue::new(&UC::from_u128(85408008396924667383611388730472331217_u128), p.0));
+        let f = Rc::new(Field::new(g.clone()));
+
         let domain_size: u32 = 8192;
-        let domain_g = f.generator(BigIntElement::from_u32(domain_size));
+        let domain_g = f.generator(f.biguint(domain_size));
 
         let fri = Fri::new(
             &FriOptions {
@@ -397,7 +413,7 @@ mod tests {
         );
 
         let mut poly = Polynomial::new(&f);
-        poly.term(&BigIntElement(BigInt::from(3)), 2);
+        poly.term(&f.bigint(3), 2);
         let mut points = Vec::new();
         for i in fri.domain() {
             points.push(poly.eval(i));
