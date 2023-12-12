@@ -1,3 +1,5 @@
+use fast_ntt::{ntt::Constants, numbers::BigInt, polynomial::Polynomial as NttPolynomial};
+
 use crate::{field::Field, FieldElement};
 use std::rc::Rc;
 
@@ -464,26 +466,30 @@ impl<T: FieldElement> Polynomial<T> {
         poly2: &Polynomial<T>,
         field: &Rc<Field<T>>,
     ) -> Polynomial<T> {
-        if poly1.degree() < 4 || poly2.degree() < 4 {
-            let mut o = poly1.clone();
-            o.mul(poly2);
-            return o;
-        }
-        let out_degree = 2 * std::cmp::max(poly1.degree(), poly2.degree());
-        let domain_size = 2_u32.pow(u32::try_from(out_degree).unwrap().ilog2() + 1);
-        let (generator, generator_inv) = field.generator_cache(&domain_size);
-        let domain = field.domain(&generator, domain_size);
-
-        let x1 = Self::eval_fft(poly1.coefs(), &domain, field);
-        let x2 = Self::eval_fft(poly2.coefs(), &domain, field);
-
-        let mut x3 = Vec::new();
-        for i in 0..domain.len() {
-            x3.push(field.mul(&x1[i], &x2[i]));
-        }
-        let domain_inv = field.domain(&generator_inv, domain_size);
-
-        let out = Self::eval_fft_inv(&x3, &domain_inv, field);
+        let poly1 = NttPolynomial::new(
+            poly1
+                .coefs
+                .iter()
+                .map(|x| BigInt::from(x.to_u32()))
+                .collect(),
+        );
+        let poly2 = NttPolynomial::new(
+            poly2
+                .coefs
+                .iter()
+                .map(|x| BigInt::from(x.to_u32()))
+                .collect(),
+        );
+        let deg = BigInt::from((poly1.len() + poly2.len()).next_power_of_two());
+        let N = BigInt::from(field.p().to_u32());
+        let w = BigInt::from(field.g().to_u32()).mod_exp((N - 1) / deg, N);
+        let c = Constants { N, w };
+        let out = poly1.mul(poly2, &c);
+        let out = out
+            .coef
+            .iter()
+            .map(|x| T::from_u32(x.to_u32().unwrap()))
+            .collect();
         let mut p = Polynomial {
             field: Rc::clone(field),
             coefs: out,

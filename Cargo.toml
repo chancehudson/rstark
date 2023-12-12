@@ -14,6 +14,7 @@ crate-type = ["bin"]
 
 [dependencies]
 blake3 = "1.4.1"
+fast-ntt = { git = "https://github.com/0xWOLAND/fast-ntt/" }
 getrandom = { version = "0.2", features = ["js"] }
 num-bigint = { version = "0.4.3", features = ["rand", "serde"] }
 num-integer = "0.1.45"
