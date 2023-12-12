@@ -1,19 +1,16 @@
 use rstark::field::Field;
 use rstark::mpolynomial::MPolynomial;
 use rstark::stark::Stark;
-use rstark::field_element::{CryptoBigIntElement, ParamWrapper, UC};
+use rstark::field_element::{G, CryptoBigIntElement};
 use std::rc::Rc;
 use std::time::Instant;
-use crypto_bigint::modular::runtime_mod::{DynResidue, DynResidueParams};
 
 fn main() {
-    let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(1_u128 + 407_u128 * 2_u128.pow(119))));
-    let g = CryptoBigIntElement(DynResidue::new(&UC::from_u128(85408008396924667383611388730472331217_u128), p.0));
-    let f = Rc::new(Field::new(g.clone()));
+    let f = Rc::new(Field::new(G));
 
     let register_count = 40;
     let sequence_len = 40;
-    let stark = Stark::new(&g.clone(), &f, register_count, sequence_len, 32, 26, 2);
+    let stark = Stark::new(&G, &f, register_count, sequence_len, 32, 26, 2);
 
     let first_step: Vec<CryptoBigIntElement> =
         (0..register_count).map(|v| f.biguint(2 + v)).collect();
