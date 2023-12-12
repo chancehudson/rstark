@@ -4,6 +4,7 @@ workflows:
   test:
     jobs:
       - test
+      - squares
 
 jobs:
   test:
@@ -16,3 +17,13 @@ jobs:
       - run:
           name: Test
           command: cargo test
+  squares:
+    resource_class: small
+    docker:
+      - image: cimg/rust:1.71.0
+    steps:
+      - checkout
+      - run: cargo --version
+      - run:
+          name: Squares Example
+          command: cargo run --example squares --release
