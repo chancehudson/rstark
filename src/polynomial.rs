@@ -1,4 +1,4 @@
-use crate::{field::Field, FieldElement};
+use crate::{field::Field, field_element::FieldElement};
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
@@ -829,16 +829,15 @@ impl<T: FieldElement> Polynomial<T> {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
-
-    use crate::{to_crypto_element, to_crypto_params, BigIntElement};
+    use crate::field_element::{ParamWrapper, CryptoBigIntElement, UC};
+    use crypto_bigint::modular::runtime_mod::{DynResidueParams};
 
     use super::*;
 
     #[test]
     fn should_test_colinearity() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
@@ -860,8 +859,8 @@ mod tests {
 
     #[test]
     fn should_compose_polynomial() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let mut root = Polynomial::new(&f);
@@ -888,8 +887,8 @@ mod tests {
 
     #[test]
     fn should_exp_polynomial() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
@@ -904,8 +903,8 @@ mod tests {
 
     #[test]
     fn should_scale_polynomial() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
@@ -927,8 +926,8 @@ mod tests {
 
     #[test]
     fn should_interpolate_lagrange() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let size = 32;
@@ -950,8 +949,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn should_fail_to_div_by_zero() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
@@ -964,8 +963,8 @@ mod tests {
 
     #[test]
     fn should_divide_polynomial() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let mut poly1 = Polynomial::new(&f);
@@ -992,8 +991,8 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         // 9x^3 - 4x^2 - 20
@@ -1008,8 +1007,8 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial_with_batch_fast() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
@@ -1032,8 +1031,8 @@ mod tests {
 
     #[test]
     fn should_eval_polynomial_with_fft() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let mut poly = Polynomial::new(&f);
@@ -1057,8 +1056,8 @@ mod tests {
 
     #[test]
     fn should_check_polynomial_equality() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(101_u128)));
+        let g = CryptoBigIntElement::from_u32(0, &p);
         let f = Rc::new(Field::new(g));
 
         let mut poly1 = Polynomial::new(&f);
@@ -1073,8 +1072,8 @@ mod tests {
 
     #[test]
     fn should_add_polynomials() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         // 2x^2 - 20
@@ -1104,8 +1103,8 @@ mod tests {
 
     #[test]
     fn should_subtract_polynomials() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         // 2x^2 - 20
@@ -1137,8 +1136,8 @@ mod tests {
 
     #[test]
     fn should_multiply_polynomials() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         // 2x^2 - 20
@@ -1166,8 +1165,8 @@ mod tests {
 
     #[test]
     fn should_multiply_polynomials_fft() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let mut poly1 = Polynomial::new(&f);
@@ -1186,8 +1185,8 @@ mod tests {
 
     #[test]
     fn should_build_zeroifier_polynomial() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
 
         let s = 128;
@@ -1214,8 +1213,8 @@ mod tests {
 
     #[test]
     fn should_build_zeroifier_polynomial_domain() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
         let size = 128_u32;
         let generator = f.generator(f.biguint(size));

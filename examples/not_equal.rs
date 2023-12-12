@@ -1,18 +1,13 @@
-use num_bigint::BigInt;
 use rstark::field::Field;
 use rstark::mpolynomial::MPolynomial;
 use rstark::stark::Stark;
-use rstark::{to_crypto_element, to_crypto_params, BigIntElement};
+use rstark::field_element::{CryptoBigIntElement, ParamWrapper, UC};
 use std::rc::Rc;
+use crypto_bigint::modular::runtime_mod::{DynResidue, DynResidueParams};
 
 fn main() {
-    let p = to_crypto_params(BigIntElement(
-        BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119),
-    ));
-    let g = to_crypto_element(
-        BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128)),
-        &p,
-    );
+    let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(1_u128 + 407_u128 * 2_u128.pow(119))));
+    let g = CryptoBigIntElement(DynResidue::new(&UC::from_u128(85408008396924667383611388730472331217_u128), p.0));
     let f = Rc::new(Field::new(g.clone()));
     let register_count = 3;
     let sequence_len = 2;

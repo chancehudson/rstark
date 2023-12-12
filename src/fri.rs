@@ -2,7 +2,7 @@ use crate::channel::Channel;
 use crate::field::Field;
 use crate::polynomial::Polynomial;
 use crate::tree::Tree;
-use crate::FieldElement;
+use crate::field_element::FieldElement;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -214,7 +214,13 @@ impl<T: FieldElement> Fri<T> {
             let mut hasher = blake3::Hasher::new();
             hasher.update(seed);
             hasher.update(&T::from_u32(counter, self.field.p()).to_bytes_le());
-            let v = T::from_bytes_le(hasher.finalize().as_bytes(), self.field.p()).to_u32();
+            let bytes = hasher.finalize().as_bytes().clone();
+            let mut v = 0_u32;
+            // TODO: double check this
+            for i in 0..4 {
+                v += u32::try_from(bytes[i]).unwrap() << 8*i;
+            }
+            // let v = T::from_bytes_le(hasher.finalize().as_bytes(), self.field.p()).to_u32();
             let index = v % size;
             let reduced_index = index % reduced_size;
             counter += 1;
@@ -379,22 +385,17 @@ impl<T: FieldElement> Fri<T> {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
-
-    use crate::{to_crypto_element, to_crypto_params, BigIntElement};
+    use crate::field_element::{ParamWrapper, CryptoBigIntElement, UC};
+    use crypto_bigint::modular::runtime_mod::{DynResidue, DynResidueParams};
 
     use super::*;
 
     #[test]
     fn should_make_verify_fri_proof() {
         let mut channel = Channel::new();
-        let p = to_crypto_params(BigIntElement(
-            BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119),
-        ));
-        let g = to_crypto_element(
-            BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128)),
-            &p,
-        );
+
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(1_u128 + 407_u128 * 2_u128.pow(119))));
+        let g = CryptoBigIntElement(DynResidue::new(&UC::from_u128(85408008396924667383611388730472331217_u128), p.0));
         let f = Rc::new(Field::new(g.clone()));
 
         let domain_size: u32 = 8192;

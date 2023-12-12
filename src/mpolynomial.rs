@@ -222,16 +222,15 @@ impl<T: FieldElement> MPolynomial<T> {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
-
-    use crate::{to_crypto_element, to_crypto_params, BigIntElement};
+    use crate::field_element::{ParamWrapper, CryptoBigIntElement, UC};
+    use crypto_bigint::modular::runtime_mod::{DynResidueParams};
 
     use super::*;
 
     #[test]
     fn should_add_sub_multipolynomials() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(101_u128)));
+        let g = CryptoBigIntElement::from_u32(0, &p);
         let f = Rc::new(Field::new(g));
         // 4x + 2y^2 + 9
         let mut poly1 = MPolynomial::new(&f);
@@ -265,8 +264,8 @@ mod tests {
 
     #[test]
     fn should_mul_multipolynomials() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(101_u128)));
+        let g = CryptoBigIntElement::from_u32(0, &p);
         let f = Rc::new(Field::new(g));
 
         // 4x + 2y^2 + 9
@@ -298,8 +297,8 @@ mod tests {
 
     #[test]
     fn should_eval_multipolynomial() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(101_u128)));
+        let g = CryptoBigIntElement::from_u32(0, &p);
         let f = Rc::new(Field::new(g));
 
         // 4x + 2y^2 + 9
@@ -317,8 +316,8 @@ mod tests {
 
     #[test]
     fn should_eval_symbolic_multipolynomial() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(5)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
         let f = Rc::new(Field::new(g));
         // 4x + 2y^2 + 9
         let mut poly = MPolynomial::new(&f);
@@ -344,8 +343,8 @@ mod tests {
 
     #[test]
     fn should_make_multipolynomial_from_polynomial() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(101_u128)));
+        let g = CryptoBigIntElement::from_u32(0, &p);
         let f = Rc::new(Field::new(g));
         // 4x + 8x^2 + 9
         let mut poly = Polynomial::new(&f);

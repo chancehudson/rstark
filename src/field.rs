@@ -1,4 +1,4 @@
-use crate::FieldElement;
+use crate::field_element::{FieldElement};
 use rand::Rng;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -219,15 +219,14 @@ impl<T: FieldElement> Field<T> {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::{BigInt, Sign};
-
-    use crate::{to_crypto_element, to_crypto_params, BigIntElement, CryptoBigIntElement};
+    use crate::field_element::{ParamWrapper, CryptoBigIntElement, UC};
+    use crypto_bigint::modular::runtime_mod::{DynResidueParams};
 
     use super::*;
 
     fn test_field() -> Field<CryptoBigIntElement> {
-        let p = to_crypto_params(BigIntElement(BigInt::from(101)));
-        let g = to_crypto_element(BigIntElement(BigInt::from(0)), &p);
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(101_u128)));
+        let g = CryptoBigIntElement::from_u32(0, &p);
         Field::new(g)
     }
 
@@ -236,27 +235,27 @@ mod tests {
         let f = test_field();
         assert_eq!(
             f.bigint(0),
-            to_crypto_element(BigIntElement(BigInt::new(Sign::Minus, vec!(0))), f.p())
+            CryptoBigIntElement::from_u32(0, f.p())
         );
         assert_eq!(
             f.bigint(-29),
-            to_crypto_element(BigIntElement(BigInt::new(Sign::Plus, vec!(72))), f.p())
+            CryptoBigIntElement::from_u32(72, f.p())
         );
         assert_eq!(
             f.bigint(-145),
-            to_crypto_element(BigIntElement(BigInt::new(Sign::Plus, vec!(57))), f.p())
+            CryptoBigIntElement::from_u32(57, f.p())
         );
         assert_eq!(
             f.bigint(32),
-            to_crypto_element(BigIntElement(BigInt::new(Sign::Plus, vec!(32))), f.p())
+            CryptoBigIntElement::from_u32(32, f.p())
         );
         assert_eq!(
             f.biguint(0),
-            to_crypto_element(BigIntElement(BigInt::new(Sign::Minus, vec!(0))), f.p())
+            CryptoBigIntElement::from_u32(0, f.p())
         );
         assert_eq!(
             f.biguint(32),
-            to_crypto_element(BigIntElement(BigInt::new(Sign::Plus, vec!(32))), f.p())
+            CryptoBigIntElement::from_u32(32, f.p())
         );
     }
 
@@ -279,6 +278,7 @@ mod tests {
 
         assert_eq!(f.add(&x, &y), f.bigint(29));
     }
+
     #[test]
     fn should_mul_two_elements() {
         let f = test_field();
@@ -301,8 +301,10 @@ mod tests {
 
     #[test]
     fn should_get_generator() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let f = Field::new(to_crypto_element(BigIntElement(BigInt::from(5)), &p));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+
+        let f = Field::new(g);
 
         for i in 1..10 {
             let g = f.generator(f.biguint(u32::pow(2, i)));
@@ -312,8 +314,9 @@ mod tests {
 
     #[test]
     fn should_get_inverse() {
-        let p = to_crypto_params(BigIntElement(BigInt::from(3221225473_u32)));
-        let f = Field::new(to_crypto_element(BigIntElement(BigInt::from(5)), &p));
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(3221225473_u128)));
+        let g = CryptoBigIntElement::from_u32(5, &p);
+        let f = Field::new(g);
 
         for i in 1..99 {
             let v = f.biguint(i);

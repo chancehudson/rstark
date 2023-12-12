@@ -4,7 +4,7 @@ use crate::fri::{Fri, FriOptions};
 use crate::mpolynomial::MPolynomial;
 use crate::polynomial::Polynomial;
 use crate::tree::Tree;
-use crate::FieldElement;
+use crate::field_element::{FieldElement};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -594,22 +594,15 @@ impl<T: FieldElement> Stark<T> {
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
-
-    use num_bigint::BigInt;
-
-    use crate::{to_crypto_element, to_crypto_params, BigIntElement};
+    use crate::field_element::{ParamWrapper, CryptoBigIntElement, UC};
+    use crypto_bigint::modular::runtime_mod::{DynResidue, DynResidueParams};
 
     use super::*;
 
     #[test]
     fn should_make_verify_stark_proof() {
-        let p = to_crypto_params(BigIntElement(
-            BigInt::from(1) + BigInt::from(407) * BigInt::from(2).pow(119),
-        ));
-        let g = to_crypto_element(
-            BigIntElement(BigInt::from(85408008396924667383611388730472331217_u128)),
-            &p,
-        );
+        let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(1_u128 + 407_u128 * 2_u128.pow(119))));
+        let g = CryptoBigIntElement(DynResidue::new(&UC::from_u128(85408008396924667383611388730472331217_u128), p.0));
         let f = Rc::new(Field::new(g.clone()));
 
         let sequence_len = 40;
