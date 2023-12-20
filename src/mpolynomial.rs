@@ -169,7 +169,7 @@ impl<T: FieldElement> MPolynomial<T> {
             let mut poly_powers = Vec::new();
             poly_powers.push(one.clone());
             for j in 1..usize::try_from(*d).unwrap() {
-                poly_powers.push(Polynomial::mul_fft(
+                poly_powers.push(Polynomial::fast_mul_fft(
                     &poly_powers[j - 1],
                     &polys[i],
                     &self.field,
@@ -184,7 +184,7 @@ impl<T: FieldElement> MPolynomial<T> {
                 if exps[i] == 0 {
                     continue;
                 }
-                inter = Polynomial::mul_fft(
+                inter = Polynomial::fast_mul_fft(
                     &inter,
                     &power_map[i][usize::try_from(exps[i]).unwrap()],
                     &self.field,

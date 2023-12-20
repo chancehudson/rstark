@@ -1,6 +1,7 @@
 use fast_ntt::{ntt::Constants, numbers::BigInt, polynomial::Polynomial as NttPolynomial};
 
 use crate::{field::Field, FieldElement};
+use rayon::prelude::*;
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
@@ -466,17 +467,50 @@ impl<T: FieldElement> Polynomial<T> {
         poly2: &Polynomial<T>,
         field: &Rc<Field<T>>,
     ) -> Polynomial<T> {
+        if poly1.degree() < 4 || poly2.degree() < 4 {
+            let mut o = poly1.clone();
+            o.mul(poly2);
+            return o;
+        }
+        let out_degree = 2 * std::cmp::max(poly1.degree(), poly2.degree());
+        let domain_size = 2_u32.pow(u32::try_from(out_degree).unwrap().ilog2() + 1);
+        let (generator, generator_inv) = field.generator_cache(&domain_size);
+        let domain = field.domain(&generator, domain_size);
+
+        let x1 = Self::eval_fft(poly1.coefs(), &domain, field);
+        let x2 = Self::eval_fft(poly2.coefs(), &domain, field);
+
+        let mut x3 = Vec::new();
+        for i in 0..domain.len() {
+            x3.push(field.mul(&x1[i], &x2[i]));
+        }
+        let domain_inv = field.domain(&generator_inv, domain_size);
+
+        let out = Self::eval_fft_inv(&x3, &domain_inv, field);
+        let mut p = Polynomial {
+            field: Rc::clone(field),
+            coefs: out,
+        };
+        p.trim();
+        p
+    }
+
+    pub fn fast_mul_fft(
+        poly1: &Polynomial<T>,
+        poly2: &Polynomial<T>,
+        field: &Rc<Field<T>>,
+    ) -> Polynomial<T> {
         let poly1 = NttPolynomial::new(
             poly1
                 .coefs
-                .iter()
+                .par_iter()
                 .map(|x| BigInt::from(x.to_u32()))
                 .collect(),
         );
         let poly2 = NttPolynomial::new(
             poly2
                 .coefs
-                .iter()
+                .par_iter()
                 .map(|x| BigInt::from(x.to_u32()))
                 .collect(),
         );
@@ -487,7 +521,7 @@ impl<T: FieldElement> Polynomial<T> {
         let out = poly1.mul(poly2, &c);
         let out = out
             .coef
-            .iter()
+            .par_iter()
             .map(|x| T::from_u32(x.to_u32().unwrap()))
             .collect();
         let mut p = Polynomial {
@@ -750,8 +784,8 @@ impl<T: FieldElement> Polynomial<T> {
 
         let mut out = Vec::new();
         for i in 0..left_interpolant.len() {
-            let mut left = Polynomial::mul_fft(&left_interpolant[i], &right_zeroifier, field);
-            let right = Polynomial::mul_fft(&right_interpolant[i], &left_zeroifier, field);
+            let mut left = Polynomial::fast_mul_fft(&left_interpolant[i], &right_zeroifier, field);
+            let right = Polynomial::fast_mul_fft(&right_interpolant[i], &left_zeroifier, field);
             left.add(&right);
             out.push(left);
         }
@@ -810,7 +844,7 @@ impl<T: FieldElement> Polynomial<T> {
         let half = points.len() >> 1;
         let left = Self::zeroifier_fft_slice(&points[0..(half)], field);
         let right = Self::zeroifier_fft_slice(&points[(half)..], field);
-        Self::mul_fft(&left, &right, field)
+        Self::fast_mul_fft(&left, &right, field)
     }
 
     pub fn zeroifier(points: &Vec<T>, field: &Rc<Field<T>>) -> Polynomial<T> {
@@ -1190,7 +1224,7 @@ mod tests {
         let mut expected = poly1.clone();
         expected.mul(&poly2);
 
-        let out = Polynomial::mul_fft(&poly1, &poly2, &f);
+        let out = Polynomial::fast_mul_fft(&poly1, &poly2, &f);
         assert!(out.is_equal(&expected));
     }
 

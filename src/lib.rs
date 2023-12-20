@@ -116,7 +116,7 @@ extern "C" {
     fn log_many(a: &str, b: &str);
 }
 
-pub trait FieldElement: Eq + PartialEq + Clone + PartialOrd + Hash + Debug {
+pub trait FieldElement: Eq + PartialEq + Clone + PartialOrd + Hash + Debug + Send + Sync {
     fn add(&self, v: &Self, p: &Self) -> Self;
     fn mul(&self, v: &Self, p: &Self) -> Self;
     fn sub(&self, v: &Self, p: &Self) -> Self;
