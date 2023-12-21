@@ -39,7 +39,7 @@ impl<T: FieldElement> Stark<T> {
         let randomizer_count = if perfect_zk {
             4 * colinearity_test_count
         } else {
-            1
+            0
         };
         let trace_bits = T::from_u32(
             (original_trace_len + randomizer_count) * transition_constraints_degree,
