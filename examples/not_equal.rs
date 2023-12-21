@@ -8,7 +8,7 @@ fn main() {
     let f = Rc::new(Field::new(G));
     let register_count = 3;
     let sequence_len = 2;
-    let stark = Stark::new(&G, &f, register_count, sequence_len, 128, 18, 2);
+    let stark = Stark::new(&G, &f, register_count, sequence_len, 128, 18, 2, true);
     // generate a proof that two numbers (a, b) are not equal
     //
     // to do this use 3 registers

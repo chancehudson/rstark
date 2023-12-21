@@ -10,7 +10,7 @@ fn main() {
 
     let register_count = 40;
     let sequence_len = 40;
-    let stark = Stark::new(&G, &f, register_count, sequence_len, 32, 26, 2);
+    let stark = Stark::new(&G, &f, register_count, sequence_len, 32, 26, 2, true);
 
     let first_step: Vec<CryptoBigIntElement> =
         (0..register_count).map(|v| f.biguint(2 + v)).collect();
