@@ -22,6 +22,7 @@ pub struct Stark<T: FieldElement> {
     omicron: T,
     omicron_domain: Vec<T>,
     fri: Fri<T>,
+    perfect_zk: bool
 }
 
 impl<T: FieldElement> Stark<T> {
@@ -33,8 +34,13 @@ impl<T: FieldElement> Stark<T> {
         expansion_factor: u32,
         colinearity_test_count: u32,
         transition_constraints_degree: u32,
+        perfect_zk: bool
     ) -> Stark<T> {
-        let randomizer_count = 4 * colinearity_test_count;
+        let randomizer_count = if perfect_zk {
+            4 * colinearity_test_count
+        } else {
+            0
+        };
         let trace_bits = T::from_u32(
             (original_trace_len + randomizer_count) * transition_constraints_degree,
             field.p(),
@@ -69,6 +75,7 @@ impl<T: FieldElement> Stark<T> {
             omicron_domain: field.domain(&omicron, omicron_domain_len),
             fri,
             fri_domain_len,
+            perfect_zk,
         }
     }
 
@@ -286,15 +293,17 @@ impl<T: FieldElement> Stark<T> {
         for i in 0..(transition_max_degree + 1) {
             randomizer_poly.term(&self.field.random(), i);
         }
-
         let randomizer_codeword = randomizer_poly
             .eval_batch_coset(&self.fri.offset, self.fri_domain_len)
             .iter()
             .map(|v| v.to_bytes_le_sized())
             .collect::<Vec<[u8; 32]>>();
         let randomizer_tree: Tree<T> = Tree::build(&randomizer_codeword);
-        let randomizer_root = randomizer_tree.root();
-        channel.push_single(&randomizer_root);
+        if self.perfect_zk {
+            let randomizer_root = randomizer_tree.root();
+            channel.push_single(&randomizer_root);
+        }
+
 
         let count =
             u32::try_from(1 + 2/*transition_quotients.len()*/ + 2 * boundary_quotients.len())
@@ -315,11 +324,17 @@ impl<T: FieldElement> Stark<T> {
             self.boundary_quotient_degree_bounds(u32::try_from(trace.len()).unwrap(), boundary);
 
         let mut terms = Vec::new();
-        terms.push(randomizer_poly);
+        // if self.perfect_zk {
+            terms.push(randomizer_poly);
+        // }
 
         terms.push(transition_quotient.clone());
-        let shift = transition_max_degree - transition_quotient_degree_bound;
-        terms.push(transition_quotient.shift_and_clone(shift));
+        if self.perfect_zk {
+            let shift = transition_max_degree - transition_quotient_degree_bound;
+            terms.push(transition_quotient.shift_and_clone(shift));
+        } else {
+            terms.push(transition_quotient.clone());
+        }
 
         for i in 0..(usize::try_from(self.register_count).unwrap()) {
             terms.push(boundary_quotients[i].clone());
@@ -329,6 +344,9 @@ impl<T: FieldElement> Stark<T> {
 
         let mut combination = Polynomial::new(&self.field);
         for i in 0..weights.len() {
+            if i == 0 && !self.perfect_zk {
+                continue;
+            }
             let mut w_poly = Polynomial::new(&self.field);
             w_poly.term(&weights[i], 0);
             w_poly.mul(&terms[i]);
@@ -345,6 +363,7 @@ impl<T: FieldElement> Stark<T> {
             }
             Ordering::Less
         });
+
         let mut duplicated_indices = indices.clone();
         duplicated_indices.extend(
             indices
@@ -373,11 +392,12 @@ impl<T: FieldElement> Stark<T> {
                 channel.push(&path);
             }
         }
-
-        for index in quadrupled_indices {
-            channel.push_single(&randomizer_codeword[usize::try_from(index).unwrap()]);
-            let (path, _) = randomizer_tree.open(index);
-            channel.push(&path);
+        if self.perfect_zk {
+            for index in quadrupled_indices {
+                channel.push_single(&randomizer_codeword[usize::try_from(index).unwrap()]);
+                let (path, _) = randomizer_tree.open(index);
+                channel.push(&path);
+            }
         }
 
         channel.serialize()
@@ -422,17 +442,27 @@ impl<T: FieldElement> Stark<T> {
             single_transition_constraint.add(t.clone().mul_scalar(&transition_weights[i]));
         }
 
-        let randomizer_root = channel.pull_root();
+        let randomizer_root = if self.perfect_zk {
+            channel.pull_root()
+        } else {
+            [0; 32]
+        };
 
         let count = u32::try_from(
-            1 + 2 * transition_constraints.len()
+            1 + 2 /* * transition_constraints.len() */
                 + 2 * usize::try_from(self.register_count).unwrap(),
         )
         .unwrap();
-        let weights = self.sample_weights(
+        let mut weights = self.sample_weights(
             count,
             &T::from_bytes_le(&channel.verifier_hash(), self.field().p()),
         );
+
+        // remove the first weight which would correspond to the randomizer root
+        // which does not exist if we're not using perfect zk
+        if !self.perfect_zk {
+            weights.remove(0);
+        }
 
         let mut polynomial_vals = self.fri.verify(&mut channel);
         polynomial_vals.sort_by(|(ax, _ay), (bx, _by)| {
@@ -476,11 +506,13 @@ impl<T: FieldElement> Stark<T> {
         }
 
         let mut randomizer_map = HashMap::new();
-        for i in duplicated_indices {
-            let val = channel.pull().data.clone().try_into().unwrap();
-            let path = &channel.pull_path();
-            Tree::<T>::verify(&randomizer_root, i, path, &val);
-            randomizer_map.insert(i, val);
+        if self.perfect_zk {
+            for i in duplicated_indices {
+                let val = channel.pull().data.clone().try_into().unwrap();
+                let path = &channel.pull_path();
+                Tree::<T>::verify(&randomizer_root, i, path, &val);
+                randomizer_map.insert(i, val);
+            }
         }
 
         let transition_quotient_degree_bound =
@@ -539,10 +571,12 @@ impl<T: FieldElement> Stark<T> {
                 .inv(&transition_zeroifier.eval(&domain_current_index));
 
             let mut terms = Vec::new();
-            terms.push(T::from_bytes_le(
-                randomizer_map.get(&current_index).unwrap(),
-                self.field().p(),
-            ));
+            if self.perfect_zk {
+                terms.push(T::from_bytes_le(
+                    randomizer_map.get(&current_index).unwrap(),
+                    self.field().p(),
+                ));
+            }
 
             // power map for domain_current_index
             let mut power_map = HashMap::new();
@@ -551,14 +585,18 @@ impl<T: FieldElement> Stark<T> {
                 .field
                 .mul(&transition_constraint_value, &transition_zeroifier_eval_inv);
             terms.push(q.clone());
-            let shift = transition_constraints_max_degree - transition_quotient_degree_bound;
-            {
-                let exp = self
-                    .field
-                    .exp(&domain_current_index, &T::from_u32(shift, self.field().p()));
-                terms.push(self.field.mul(&q, &exp));
-                power_map.insert(shift, exp);
-            }
+            if self.perfect_zk {
+                let shift = transition_constraints_max_degree - transition_quotient_degree_bound;
+                {
+                    let exp = self
+                        .field
+                        .exp(&domain_current_index, &T::from_u32(shift, self.field().p()));
+                    terms.push(self.field.mul(&q, &exp));
+                    power_map.insert(shift, exp);
+                }
+            } else {
+                    terms.push(q.clone());
+                }
 
             for j in 0..usize::try_from(self.register_count).unwrap() {
                 let bqv =
@@ -599,47 +637,46 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn should_make_verify_stark_proof() {
+    fn build_proof(trace_len: u32, reg_count: u32, perfect_zk: bool) {
         let p = ParamWrapper(DynResidueParams::new(&UC::from_u128(1_u128 + 407_u128 * 2_u128.pow(119))));
         let g = CryptoBigIntElement(DynResidue::new(&UC::from_u128(85408008396924667383611388730472331217_u128), p.0));
         let f = Rc::new(Field::new(g.clone()));
 
-        let sequence_len = 40;
-        let stark = Stark::new(&g.clone(), &f, 2, sequence_len, 32, 26, 2);
+        let sequence_len = trace_len;
+        let stark = Stark::new(&g.clone(), &f, reg_count, sequence_len, 32, 26, 2, perfect_zk);
 
         let mut trace = Vec::new();
-        trace.push(vec![f.bigint(2), f.bigint(3)]);
-        trace.push(vec![f.bigint(4), f.bigint(9)]);
+        let first_step: Vec<CryptoBigIntElement> = (0..reg_count).map(|v| f.biguint(2 + v)).collect();
+        trace.push(first_step);
+
         while trace.len() < sequence_len.try_into().unwrap() {
-            let e1 = &trace[trace.len() - 1][0];
-            let e2 = &trace[trace.len() - 1][1];
-            trace.push(vec![f.mul(&e1, &e1), f.mul(&e2, &e2)]);
+            let last = &trace[trace.len() - 1];
+            let mut next = Vec::new();
+            for i in last {
+                next.push(f.mul(&i, &i));
+            }
+            trace.push(next);
         }
 
-        let boundary_constraints = vec![
-            (0, 0, f.bigint(2)),
-            (0, 1, f.bigint(3)),
-            (sequence_len - 1, 0, trace[trace.len() - 1][0].clone()),
-            (sequence_len - 1, 1, trace[trace.len() - 1][1].clone()),
-        ];
+        let mut boundary_constraints = Vec::new();
+        for (i, v) in trace[0].iter().enumerate() {
+            boundary_constraints.push((0, i as u32, v.clone()));
+        }
+        for (i, v) in trace[trace.len() - 1].iter().enumerate() {
+            boundary_constraints.push((sequence_len - 1, i as u32, v.clone()));
+        }
 
-        let variables = MPolynomial::variables(1 + 2 * 2, &f);
+        let variables = MPolynomial::variables(1 + 2 * reg_count, &f);
 
         let _cycle_index = &variables[0];
-        let prev_state = &variables[1..3];
-        let next_state = &variables[3..];
+        let reg_count_usize = usize::try_from(reg_count).unwrap();
+        let prev_state = &variables[1..(reg_count_usize+1)];
+        let next_state = &variables[(reg_count_usize+1)..];
         let mut transition_constraints = Vec::new();
-        {
-            let mut c = prev_state[0].clone();
-            c.mul(&prev_state[0]);
-            c.sub(&next_state[0]);
-            transition_constraints.push(c);
-        }
-        {
-            let mut c = prev_state[1].clone();
-            c.mul(&prev_state[1]);
-            c.sub(&next_state[1]);
+        for i in 0..reg_count_usize {
+            let mut c = prev_state[i].clone();
+            c.mul(&prev_state[i]);
+            c.sub(&next_state[i]);
             transition_constraints.push(c);
         }
         let ins = Instant::now();
@@ -647,5 +684,23 @@ mod tests {
         println!("prove: {:?}", ins.elapsed());
         stark.verify(&proof, &transition_constraints, &boundary_constraints);
         println!("verify: {:?}", ins.elapsed());
+    }
+
+    #[test]
+    fn should_make_verify_stark_proof() {
+        let ins = Instant::now();
+        for i in 2..8 {
+            for j in 2..4 {
+                build_proof(i, j, true);
+            }
+        }
+        println!("perfect zk: {:?}", ins.elapsed());
+        let ins = Instant::now();
+        for i in 2..8 {
+            for j in 2..4 {
+                build_proof(i, j, false);
+            }
+        }
+        println!("computational zk: {:?}", ins.elapsed());
     }
 }

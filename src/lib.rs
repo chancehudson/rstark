@@ -21,6 +21,7 @@ pub struct ProveInput<T: FieldElement> {
     trace: Vec<Vec<T>>,
     transition_constraints: Vec<HashMap<Vec<u32>, T>>,
     boundary: Vec<(u32, u32, T)>,
+    perfect_zk: bool
 }
 
 #[derive(Serialize, Deserialize)]
@@ -29,9 +30,10 @@ pub struct VerifyInput<T: FieldElement> {
     register_count: u32,
     transition_constraints: Vec<HashMap<Vec<u32>, T>>,
     boundary: Vec<(u32, u32, T)>,
+    perfect_zk: bool
 }
 
-fn stark_(trace_len: u32, register_count: u32) -> Stark<CryptoBigIntElement> {
+fn stark_(trace_len: u32, register_count: u32, perfect_zk: bool) -> Stark<CryptoBigIntElement> {
     let f = Rc::new(Field::new(G));
     Stark::<CryptoBigIntElement>::new(
         &G,
@@ -41,6 +43,7 @@ fn stark_(trace_len: u32, register_count: u32) -> Stark<CryptoBigIntElement> {
         32, // expansion factor
         26, // colinearity tests
         2,  // constraint degree
+        perfect_zk
     )
 }
 
@@ -58,6 +61,7 @@ pub fn prove(input: JsValue) -> String {
     let stark: Stark<CryptoBigIntElement> = stark_(
         input.trace.len().try_into().unwrap(),
         register_count.try_into().unwrap(),
+        input.perfect_zk
     );
 
     let transition_constraints = input
@@ -79,7 +83,7 @@ pub fn prove(input: JsValue) -> String {
 pub fn verify(proof: String, input: JsValue) {
     let input: VerifyInput<CryptoBigIntElement> = serde_wasm_bindgen::from_value(input).unwrap();
 
-    let stark = stark_(input.trace_len, input.register_count);
+    let stark = stark_(input.trace_len, input.register_count, input.perfect_zk);
 
     let transition_constraints: Vec<MPolynomial<CryptoBigIntElement>> = input
         .transition_constraints
