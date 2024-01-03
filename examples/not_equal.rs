@@ -43,9 +43,9 @@ fn main() {
         let mut one = MPolynomial::new(&f);
         one.term(&f.one(), &vec![0]);
         one.sub(
-            &prev_state[2]
+            prev_state[2]
                 .clone()
-                .mul(&prev_state[0].clone().sub(&prev_state[1])),
+                .mul(prev_state[0].clone().sub(&prev_state[1])),
         );
         transition_constraints.push(one);
     }

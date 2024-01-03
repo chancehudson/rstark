@@ -39,13 +39,13 @@ fn stark_(trace_len: u32, register_count: u32) -> Stark<CryptoBigIntElement> {
         register_count,
         trace_len,
         32, // expansion factor
-        26, // colinearity tests
+        24, // colinearity tests
         2,  // constraint degree
     )
 }
 
 #[wasm_bindgen]
-pub fn prove(input: JsValue) -> String {
+pub fn prove(input: JsValue) -> Vec<u8> {
     let input: ProveInput<CryptoBigIntElement> = serde_wasm_bindgen::from_value(input).unwrap();
 
     let register_count = input.trace[0].len();
@@ -72,11 +72,14 @@ pub fn prove(input: JsValue) -> String {
         .collect();
     let trace = input.trace.iter().map(|v| v.to_vec()).collect();
 
-    stark.prove(&trace, &transition_constraints, &boundary_constraints)
+    time_start("prove");
+    let out = stark.prove(&trace, &transition_constraints, &boundary_constraints);
+    time_end("prove");
+    out
 }
 
 #[wasm_bindgen]
-pub fn verify(proof: String, input: JsValue) {
+pub fn verify(proof: &[u8], input: JsValue) {
     let input: VerifyInput<CryptoBigIntElement> = serde_wasm_bindgen::from_value(input).unwrap();
 
     let stark = stark_(input.trace_len, input.register_count);
@@ -91,7 +94,9 @@ pub fn verify(proof: String, input: JsValue) {
         .iter()
         .map(|(v1, v2, v3)| (*v1, *v2, v3.clone()))
         .collect();
+    time_start("verify");
     stark.verify(&proof, &transition_constraints, &boundary_constraints);
+    time_end("verify");
 }
 
 #[wasm_bindgen]
@@ -110,4 +115,10 @@ extern "C" {
     // Multiple arguments too!
     #[wasm_bindgen(js_namespace = console, js_name = log)]
     fn log_many(a: &str, b: &str);
+
+    #[wasm_bindgen(js_namespace = console, js_name = time)]
+    fn time_start(a: &str);
+
+    #[wasm_bindgen(js_namespace = console, js_name = timeEnd)]
+    fn time_end(a: &str);
 }

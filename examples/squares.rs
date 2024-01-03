@@ -21,7 +21,7 @@ fn main() {
         let last = &trace[trace.len() - 1];
         let mut next = Vec::new();
         for i in last {
-            next.push(f.mul(&i, &i));
+            next.push(f.mul(i, i));
         }
         trace.push(next);
     }

@@ -1,4 +1,7 @@
 use serde::{Deserialize, Serialize};
+extern crate rmp_serde as rmps;
+use rmps::{Deserializer, Serializer};
+use std::io::Cursor;
 
 #[derive(Serialize, Deserialize)]
 pub struct Message {
@@ -71,13 +74,17 @@ impl Channel {
         *hasher.finalize().as_bytes()
     }
 
-    pub fn serialize(&self) -> String {
-        serde_json::to_string(&self.messages).unwrap()
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        self.messages.serialize(&mut Serializer::new(&mut buf)).unwrap();
+        buf
     }
 
-    pub fn deserialize(data: &str) -> Channel {
+    pub fn deserialize(data: &[u8]) -> Channel {
+        let cur = Cursor::new(data);
+        let mut de = Deserializer::new(cur);
         Channel {
-            messages: serde_json::from_str(data).unwrap(),
+            messages: Deserialize::deserialize(&mut de).unwrap(),
             read_index: 0,
         }
     }

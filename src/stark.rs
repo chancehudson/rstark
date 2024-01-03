@@ -8,6 +8,31 @@ use crate::field_element::{FieldElement};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::rc::Rc;
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+extern "C" {
+    // Use `js_namespace` here to bind `console.log(..)` instead of just
+    // `log(..)`
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+
+    // The `console.log` is quite polymorphic, so we can bind it with multiple
+    // signatures. Note that we need to use `js_name` to ensure we always call
+    // `log` in JS.
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn log_u32(a: u32);
+
+    // Multiple arguments too!
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn log_many(a: &str, b: &str);
+
+    #[wasm_bindgen(js_namespace = console, js_name = time)]
+    fn time_start(a: &str);
+
+    #[wasm_bindgen(js_namespace = console, js_name = timeEnd)]
+    fn time_end(a: &str);
+}
 
 pub struct Stark<T: FieldElement> {
     offset: T,
@@ -179,9 +204,10 @@ impl<T: FieldElement> Stark<T> {
         trace: &Vec<Vec<T>>,
         transition_constraints: &Vec<MPolynomial<T>>,
         boundary: &Vec<(u32, u32, T)>,
-    ) -> String {
+    ) -> Vec<u8> {
         let mut trace = trace.clone();
         let mut channel = Channel::new();
+        // time_start("pppppp");
 
         for _ in 0..self.randomizer_count {
             let mut r: Vec<T> = Vec::new();
@@ -282,6 +308,8 @@ impl<T: FieldElement> Stark<T> {
         );
 
         let mut randomizer_poly = Polynomial::new(&self.field);
+        let mut randomizer_codeword = vec!([0_u8; 32]);
+        let mut randomizer_tree: Tree<T> = Tree::build(&randomizer_codeword);
         let transition_max_degree = self.max_degree(&single_transition_constraint);
         for i in 0..(transition_max_degree + 1) {
             randomizer_poly.term(&self.field.random(), i);
@@ -305,6 +333,8 @@ impl<T: FieldElement> Stark<T> {
         );
 
         let bounds = self.transition_quotient_degree_bound(&single_transition_constraint);
+        println!("{:?}", bounds);
+        println!("{:?}", transition_quotient.degree());
         if transition_quotient.degree() != usize::try_from(bounds).unwrap() {
             panic!("transition quotient degrees do not match expected value");
         }
@@ -379,13 +409,14 @@ impl<T: FieldElement> Stark<T> {
             let (path, _) = randomizer_tree.open(index);
             channel.push(&path);
         }
+        // time_end("pppppp");
 
         channel.serialize()
     }
 
     pub fn verify(
         &self,
-        proof: &str,
+        proof: &[u8],
         transition_constraints: &Vec<MPolynomial<T>>,
         boundary: &Vec<(u32, u32, T)>,
     ) -> bool {
